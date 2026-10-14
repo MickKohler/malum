@@ -99,8 +99,30 @@ Plugin-System.
 
 ## Stand
 
-Nichts gebaut. Nächster Schritt: siehe WOCHE-1-CHECKLISTE.md.
+Stand 2026-10-14: Abend 0 und große Teile von Abend 1 erledigt. Tauri-2-Gerüst
+(React + TypeScript) steht, Rust-Backend kompiliert (`cargo check`), privates
+Repo unter github.com/MickKohler/malum. Offen: `.env` mit Gemini-Key, Fenster-Spike
+(Abend 2), API-Spike (Abend 3). Siehe WOCHE-1-CHECKLISTE.md.
 
 ## Entscheidungslog
 
 (Datum, Entscheidung, Grund)
+
+- 2026-10-14, Gemini API (Gratis-Kontingent) als Anbieter, hinter einem Interface
+  austauschbar. Grund: einzige Option ohne laufende Kosten, die Bild und Audio in
+  einem Aufruf annimmt. Ob Bild und Audio im Gratis-Tarif wirklich funktionieren und
+  wie gut Formeln gelesen werden, klärt der API-Spike (Abend 3).
+- 2026-10-14, Startkandidaten laut Preisseite (Gratis-Tarif): Antwortmodell
+  Gemini 3.8 Flash, Gegenprobe 3.6 Flash. TTS: Gemini 3.8 Flash TTS
+  (`gemini-3.8-flash-tts`, Deutsch unterstützt, 30 feste Stimmen, WAV 24 kHz mono),
+  Fallback Windows-Stimme. Modellnamen kommen in die Einstellungen, nicht in den Code.
+- 2026-10-14, API-Hinweis: Aufruf über `v1beta/interactions` mit Header
+  `x-goog-api-key` (neueres Format, nicht `generateContent`); SDK-Mindestversionen
+  Python `google-genai` >= 2.25.0, JS `@google/genai` >= 2.24.0. Vor der Umsetzung
+  gegen die aktuelle Doku prüfen. Gratis-Limits stehen nicht in der Doku, nur in
+  AI Studio; zu Beginn von Abend 3 dort nachsehen.
+- 2026-10-14, Datenschutz: Im Gratis-Tarif nutzt Google Inhalte zur
+  Produktverbesserung. Deshalb nur Übungsmaterial senden, nie private Fenster.
+  Persönliches Google-Konto für den Key, kein Uni-Konto.
+- 2026-10-14, Windows Terminal statt alter cmd nutzen (Logo und eingefügte Links
+  wurden in der alten Konsole als Fragezeichen dargestellt).
