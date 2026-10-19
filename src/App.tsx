@@ -1,49 +1,91 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import "./App.css";
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+/** Muss zur Dauer der Ausblend-Transition in App.css passen. */
+const EXIT_MS = 120;
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
+type Phase = "in" | "out";
+
+function App() {
+  const [phase, setPhase] = useState<Phase>("out");
+  const [error, setError] = useState<string | null>(null);
+  const [text, setText] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const hideTimer = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    const focusInput = () => {
+      // Ein Frame warten, bis das Fenster wirklich sichtbar ist.
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      });
+    };
+
+    const enter = () => {
+      // Eine laufende Ausblend-Animation abbrechen.
+      window.clearTimeout(hideTimer.current);
+      setPhase("in");
+      focusInput();
+    };
+
+    const exit = () => {
+      setPhase("out");
+      window.clearTimeout(hideTimer.current);
+      hideTimer.current = window.setTimeout(() => {
+        void invoke("hide_overlay");
+      }, EXIT_MS);
+    };
+
+    const unlistenShow = listen("overlay-show", enter);
+    const unlistenDismiss = listen("overlay-dismiss", exit);
+
+    invoke<string | null>("startup_error").then((message) => {
+      if (message) {
+        setError(message);
+        enter();
+      }
+    });
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        void invoke("request_dismiss");
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      window.clearTimeout(hideTimer.current);
+      void unlistenShow.then((off) => off());
+      void unlistenDismiss.then((off) => off());
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <main className="stage">
+      <div className="bar" data-phase={phase} data-error={error ? "" : undefined}>
+        <span className="orb" aria-hidden="true" />
+        {error ? (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        ) : (
+          <input
+            ref={inputRef}
+            className="prompt"
+            value={text}
+            onChange={(e) => setText(e.currentTarget.value)}
+            placeholder="Frag etwas zu deinem Übungsblatt …"
+            spellCheck={false}
+            autoComplete="off"
+          />
+        )}
+        <kbd className="hint">Esc</kbd>
       </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
     </main>
   );
 }

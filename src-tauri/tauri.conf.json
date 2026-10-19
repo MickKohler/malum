@@ -12,9 +12,18 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "malum",
-        "width": 800,
-        "height": 600
+        "width": 680,
+        "height": 72,
+        "decorations": false,
+        "transparent": true,
+        "noRedirectionBitmap": true,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "visible": false
       }
     ],
     "security": {
