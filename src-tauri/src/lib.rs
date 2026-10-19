@@ -1,6 +1,8 @@
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindow, WindowEvent};
 use tauri_plugin_global_shortcut::{
     Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState,
@@ -94,6 +96,41 @@ fn toggle_overlay(app: &AppHandle) {
     }
 }
 
+/// Tray-Icon mit Menü. Linksklick blendet das Overlay ein, Rechtsklick zeigt das Menü.
+fn build_tray(app: &AppHandle) -> tauri::Result<()> {
+    let open = MenuItem::with_id(app, "open", "Öffnen\tStrg+Umschalt+Leertaste", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Beenden", true, None::<&str>)?;
+    let separator = PredefinedMenuItem::separator(app)?;
+    let menu = Menu::with_items(app, &[&open, &separator, &quit])?;
+
+    let mut tray = TrayIconBuilder::with_id("main")
+        .tooltip("malum")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "open" => show_overlay(app),
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            // Immer einblenden statt umschalten: Der Klick aufs Tray nimmt dem
+            // Overlay ohnehin den Fokus, das würde es sonst gleich wieder schließen.
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                show_overlay(tray.app_handle());
+            }
+        });
+    if let Some(icon) = app.default_window_icon() {
+        tray = tray.icon(icon.clone());
+    }
+    tray.build(app)?;
+    Ok(())
+}
+
 #[tauri::command]
 fn request_dismiss(app: AppHandle) {
     dismiss_overlay(&app);
@@ -124,6 +161,8 @@ pub fn run() {
         .setup(|app| {
             #[cfg(desktop)]
             {
+                build_tray(app.handle())?;
+
                 let toggle = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::Space);
                 app.handle().plugin(
                     tauri_plugin_global_shortcut::Builder::new()
