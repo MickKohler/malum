@@ -1,9 +1,10 @@
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindow, WindowEvent};
+use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_global_shortcut::{
     Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState,
 };
@@ -99,16 +100,28 @@ fn toggle_overlay(app: &AppHandle) {
 /// Tray-Icon mit Menü. Linksklick blendet das Overlay ein, Rechtsklick zeigt das Menü.
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "Öffnen\tStrg+Umschalt+Leertaste", true, None::<&str>)?;
+    let autostart_on = app.autolaunch().is_enabled().unwrap_or(false);
+    let autostart = CheckMenuItem::with_id(
+        app,
+        "autostart",
+        "Mit Windows starten",
+        true,
+        autostart_on,
+        None::<&str>,
+    )?;
     let quit = MenuItem::with_id(app, "quit", "Beenden", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
-    let menu = Menu::with_items(app, &[&open, &separator, &quit])?;
+    let menu = Menu::with_items(app, &[&open, &separator, &autostart, &separator, &quit])?;
+
+    let autostart_item = autostart.clone();
 
     let mut tray = TrayIconBuilder::with_id("main")
         .tooltip("malum")
         .menu(&menu)
         .show_menu_on_left_click(false)
-        .on_menu_event(|app, event| match event.id.as_ref() {
+        .on_menu_event(move |app, event| match event.id.as_ref() {
             "open" => show_overlay(app),
+            "autostart" => set_autostart(app, &autostart_item),
             "quit" => app.exit(0),
             _ => {}
         })
@@ -129,6 +142,18 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     }
     tray.build(app)?;
     Ok(())
+}
+
+/// Windows schaltet den Haken beim Klick schon um. Den neuen Zustand übernehmen
+/// und bei einem Fehler den Haken auf den echten Zustand zurücksetzen.
+fn set_autostart(app: &AppHandle, item: &CheckMenuItem<tauri::Wry>) {
+    let want = item.is_checked().unwrap_or(false);
+    let autolaunch = app.autolaunch();
+    let result = if want { autolaunch.enable() } else { autolaunch.disable() };
+    if let Err(err) = result {
+        eprintln!("Autostart konnte nicht geändert werden: {err}");
+        let _ = item.set_checked(autolaunch.is_enabled().unwrap_or(false));
+    }
 }
 
 #[tauri::command]
@@ -155,12 +180,26 @@ fn startup_error(state: State<'_, SharedState>) -> Option<String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    // Muss als erstes Plugin registriert werden. Ein zweiter Start (z. B. übers
+    // Startmenü) blendet nur das Overlay der laufenden App ein.
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            show_overlay(app);
+        }));
+    }
+
+    builder
         .plugin(tauri_plugin_opener::init())
         .manage(SharedState::default())
         .setup(|app| {
             #[cfg(desktop)]
             {
+                app.handle().plugin(tauri_plugin_autostart::init(
+                    tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+                    None,
+                ))?;
                 build_tray(app.handle())?;
 
                 let toggle = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::Space);
