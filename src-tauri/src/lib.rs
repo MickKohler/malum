@@ -7,8 +7,13 @@ use tauri_plugin_global_shortcut::{
 };
 
 /// Logische Größe des Overlays (muss zu tauri.conf.json passen).
-const OVERLAY_WIDTH: f64 = 680.0;
-const OVERLAY_HEIGHT: f64 = 72.0;
+const OVERLAY_WIDTH: f64 = 440.0;
+
+/// Logischer Abstand des Fensters zum rechten und oberen Rand des Arbeitsbereichs.
+/// Sichtbar sind 16 bzw. 24 px, weil `.stage` in App.css noch 10 bzw. 8 px
+/// Innenabstand für den Schatten hat.
+const MARGIN_RIGHT: f64 = 6.0;
+const MARGIN_TOP: f64 = 16.0;
 
 /// Fokusverlust direkt nach dem Einblenden ignorieren (Windows meldet beim
 /// Anzeigen manchmal kurz "unfokussiert", bevor der Fokus ankommt).
@@ -29,8 +34,8 @@ fn overlay(app: &AppHandle) -> Option<WebviewWindow> {
     app.get_webview_window("main")
 }
 
-/// Mittig auf den Monitor setzen, auf dem gerade der Mauszeiger ist.
-fn center_on_cursor_monitor(app: &AppHandle, window: &WebviewWindow) {
+/// Oben rechts an den Monitor andocken, auf dem gerade der Mauszeiger ist.
+fn dock_on_cursor_monitor(app: &AppHandle, window: &WebviewWindow) {
     let monitor = app
         .cursor_position()
         .ok()
@@ -42,15 +47,14 @@ fn center_on_cursor_monitor(app: &AppHandle, window: &WebviewWindow) {
         return;
     };
 
-    // Physische Größe für diesen Monitor ausrechnen, damit es auch bei
-    // unterschiedlicher Skalierung pro Monitor mittig sitzt.
+    // In physische Pixel dieses Monitors umrechnen, damit es auch bei
+    // unterschiedlicher Skalierung pro Monitor richtig sitzt.
     let scale = monitor.scale_factor();
-    let width = (OVERLAY_WIDTH * scale).round() as i32;
-    let height = (OVERLAY_HEIGHT * scale).round() as i32;
+    let px = |logical: f64| (logical * scale).round() as i32;
 
     let area = monitor.work_area();
-    let x = area.position.x + (area.size.width as i32 - width) / 2;
-    let y = area.position.y + (area.size.height as i32 - height) / 2;
+    let x = area.position.x + area.size.width as i32 - px(OVERLAY_WIDTH) - px(MARGIN_RIGHT);
+    let y = area.position.y + px(MARGIN_TOP);
     let _ = window.set_position(PhysicalPosition::new(x, y));
 }
 
@@ -62,7 +66,7 @@ fn show_overlay(app: &AppHandle) {
         state.open = true;
         state.shown_at = Some(Instant::now());
     }
-    center_on_cursor_monitor(app, &window);
+    dock_on_cursor_monitor(app, &window);
     let _ = window.show();
     let _ = window.set_focus();
     let _ = app.emit("overlay-show", ());

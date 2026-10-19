@@ -79,7 +79,7 @@ function App() {
             className="prompt"
             value={text}
             onChange={(e) => setText(e.currentTarget.value)}
-            placeholder="Frag etwas zu deinem Übungsblatt …"
+            placeholder="Frag etwas …"
             spellCheck={false}
             autoComplete="off"
           />
