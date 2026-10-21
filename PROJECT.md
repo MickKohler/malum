@@ -99,10 +99,14 @@ Plugin-System.
 
 ## Stand
 
-Stand 2026-10-14: Abend 0 und große Teile von Abend 1 erledigt. Tauri-2-Gerüst
-(React + TypeScript) steht, Rust-Backend kompiliert (`cargo check`), privates
-Repo unter github.com/MickKohler/malum. Offen: `.env` mit Gemini-Key, Fenster-Spike
-(Abend 2), API-Spike (Abend 3). Siehe WOCHE-1-CHECKLISTE.md.
+Stand 2026-10-21: Abend 0 bis 2 erledigt. Fenster-Spike fertig (Tag `spike-fenster`)
+und erweitert: Overlay (440 px breit) per Strg+Umschalt+Leertaste ein- und
+ausblenden, oben rechts angedockt auf dem Monitor mit dem Mauszeiger, Ein- und
+Ausblend-Animation, Esc und Fokusverlust schließen. Tray-Icon mit Menü (Öffnen,
+Mit Windows starten, Beenden), nur eine laufende Instanz. Mikrofon-Symbol in der
+Leiste, bisher nur Optik. Installer als NSIS. Der Shortcut reagiert bisher nur auf
+"gedrückt"; Push-to-talk ("losgelassen") fehlt noch.
+Offen: `.env` mit Gemini-Key, API-Spike (Abend 3). Siehe WOCHE-1-CHECKLISTE.md.
 
 ## Entscheidungslog
 
@@ -126,3 +130,12 @@ Repo unter github.com/MickKohler/malum. Offen: `.env` mit Gemini-Key, Fenster-Sp
   Persönliches Google-Konto für den Key, kein Uni-Konto.
 - 2026-10-14, Windows Terminal statt alter cmd nutzen (Logo und eingefügte Links
   wurden in der alten Konsole als Fragezeichen dargestellt).
+- 2026-10-19, Overlay oben rechts andocken statt mittig, Leiste schmaler (440 px).
+  Grund: verdeckt das Übungsblatt nicht.
+- 2026-10-19, Tray-Icon mit Menü. Linksklick blendet immer ein statt umzuschalten,
+  weil der Klick aufs Tray dem Overlay den Fokus nimmt.
+- 2026-10-19, Neue Abhängigkeiten `tauri-plugin-autostart` (Haken "Mit Windows
+  starten", standardmäßig aus) und `tauri-plugin-single-instance` (ein zweiter Start
+  blendet das Overlay der laufenden App ein, statt am belegten Shortcut zu scheitern).
+- 2026-10-20, Installer nur als NSIS, kein MSI. Grund: spart den WiX-Download,
+  ein Installer reicht.
