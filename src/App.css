@@ -241,7 +241,7 @@ body,
 }
 
 /* Erst nach der Tipp-Grenze (300 ms) zeigen, sonst blitzt es bei kurzem Tippen auf. */
-.panel[data-listening] {
+.panel[data-listening-only] {
   animation: panel-in 220ms 280ms var(--ease-in) both;
 }
 
@@ -301,6 +301,28 @@ body,
   stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+/* Verlauf: Fragen und Antworten untereinander */
+.turn + .turn {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--bar-border);
+}
+
+.turn + .status:not(:empty),
+.turn + .listening {
+  margin-top: 14px;
+}
+
+.question {
+  margin: 0 0 8px;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.question[data-voice] {
+  font-style: italic;
 }
 
 .status {

@@ -54,8 +54,12 @@ struct OverlayState {
     tap_dismisses: bool,
     /// Läuft gerade: Screenshot des Fensters, das vor dem Overlay vorne war.
     capture: Option<JoinHandle<Option<Vec<u8>>>>,
-    /// Fertiger Screenshot für weitere Fragen in derselben Sitzung. Nur im Speicher.
+    /// Fertiger Screenshot der Sitzung. Nur im Speicher.
     screenshot: Option<Arc<Vec<u8>>>,
+    /// Bisherige Fragen und Antworten der Sitzung, für Rückfragen mit Kontext.
+    history: Vec<serde_json::Value>,
+    /// Zählt Sitzungen, damit eine späte Antwort nicht in einer neuen Sitzung landet.
+    session: u64,
     /// Brechen laufende Gemini-Anfragen (Antwort, Vorlesen) ab.
     cancel: Vec<Box<dyn Fn() + Send>>,
 }
@@ -70,6 +74,8 @@ impl OverlayState {
             task.abort();
         }
         self.screenshot = None;
+        self.history.clear();
+        self.session += 1;
     }
 }
 
@@ -307,13 +313,28 @@ async fn ask(
         let png = task.await.ok().flatten();
         app.state::<SharedState>().lock().unwrap().screenshot = png.map(Arc::new);
     }
-    let screenshot = app.state::<SharedState>().lock().unwrap().screenshot.clone();
+    let (screenshot, history, session) = {
+        let state = app.state::<SharedState>();
+        let state = state.lock().unwrap();
+        (state.screenshot.clone(), state.history.clone(), state.session)
+    };
 
-    cancellable(&app, async move {
-        let audio = audio.as_deref().zip(audio_mime.as_deref());
-        gemini::ask(&key, question.as_deref(), audio, screenshot.as_deref().map(Vec::as_slice)).await
+    // Der Screenshot geht nur mit der ersten Frage mit, danach steht er im Verlauf.
+    let screenshot = screenshot.filter(|_| history.is_empty());
+    let audio = audio.as_deref().zip(audio_mime.as_deref());
+    let step = gemini::user_step(question.as_deref(), audio, screenshot.as_deref().map(Vec::as_slice));
+
+    let (answer, step) = cancellable(&app, async move {
+        let (answer, raw) = gemini::ask(&key, &history, &step).await?;
+        Ok((answer, [step, gemini::model_step(&raw)]))
     })
-    .await
+    .await?;
+    let state = app.state::<SharedState>();
+    let mut state = state.lock().unwrap();
+    if state.session == session {
+        state.history.extend(step);
+    }
+    Ok(answer)
 }
 
 /// Text vorlesen. Gibt die WAV-Datei als rohe Bytes ans Frontend.

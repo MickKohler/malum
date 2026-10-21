@@ -30,12 +30,15 @@ type Voice = "off" | "loading" | "playing";
 /** Getippte Frage oder Sprachaufnahme. */
 type Question = { text: string } | { audio: Recording };
 
+/** Zustand unter dem Verlauf. "input" = nichts los, bereit für die nächste Frage. */
 type View =
   | { kind: "input" }
   | { kind: "key"; invalid: boolean }
   | { kind: "loading" }
-  | { kind: "answer"; answer: Answer }
   | { kind: "error"; message: string };
+
+/** Eine Frage mit Antwort. `question` ist `null` bei einer Sprachfrage. */
+type Turn = { question: string | null; answer: Answer };
 
 function errorMessage(error: AskError): string {
   switch (error.kind) {
@@ -58,6 +61,9 @@ function App() {
   const [text, setText] = useState("");
   const [keyText, setKeyText] = useState("");
   const [view, setView] = useState<View>({ kind: "input" });
+  const [turns, setTurns] = useState<Turn[]>([]);
+  const panelRef = useRef<HTMLElement>(null);
+  const lastTurnRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const stageRef = useRef<HTMLElement>(null);
   const hideTimer = useRef<number | undefined>(undefined);
@@ -85,6 +91,7 @@ function App() {
       window.clearTimeout(hideTimer.current);
       stopVoice();
       setView({ kind: "input" });
+      setTurns([]);
       setPhase("in");
       focusInput();
     };
@@ -140,9 +147,19 @@ function App() {
   }, []);
 
   // Solange eine Antwort oder Meldung sichtbar ist, schließt ein Klick daneben nicht.
+  const sticky = turns.length > 0 || view.kind === "error";
   useEffect(() => {
-    void invoke("set_sticky", { sticky: view.kind === "answer" || view.kind === "error" });
-  }, [view.kind]);
+    void invoke("set_sticky", { sticky });
+  }, [sticky]);
+
+  // Neue Antwort von ihrem Anfang an zeigen, Statuszeilen unten im Blick halten.
+  useEffect(() => {
+    if (view.kind === "input" && !listening) {
+      lastTurnRef.current?.scrollIntoView({ block: "start" });
+    } else {
+      panelRef.current?.scrollTo({ top: panelRef.current.scrollHeight });
+    }
+  }, [turns.length, view.kind, listening]);
 
   // Nach jedem Wechsel zurück zur Eingabe den Fokus ins Feld setzen.
   useEffect(() => {
@@ -228,7 +245,9 @@ function App() {
           : { question: null, audio: Array.from(question.audio.bytes), audioMime: question.audio.mime },
       );
       if (id !== session.current) return;
-      setView({ kind: "answer", answer });
+      setTurns((prev) => [...prev, { question: "text" in question ? question.text : null, answer }]);
+      setView({ kind: "input" });
+      if ("text" in question) setText("");
       void speak(answer.needsClarification ?? answer.spoken);
     } catch (e) {
       if (id !== session.current) return;
@@ -270,8 +289,9 @@ function App() {
   }
 
   function toggleVoice() {
-    if (view.kind !== "answer") return;
-    if (voice === "off") void speak(view.answer.needsClarification ?? view.answer.spoken);
+    const answer = turns[turns.length - 1]?.answer;
+    if (!answer) return;
+    if (voice === "off") void speak(answer.needsClarification ?? answer.spoken);
     else stopVoice();
   }
 
@@ -344,20 +364,34 @@ function App() {
         </button>
       </form>
 
-      {!error && (listening || view.kind !== "input") && (
+      {!error && (listening || turns.length > 0 || view.kind !== "input") && (
         <section
+          ref={panelRef}
           className="panel"
           data-phase={phase}
-          data-listening={listening ? "" : undefined}
+          // Nur Zuhören, sonst nichts: erst nach der Tipp-Grenze zeigen.
+          data-listening-only={listening && turns.length === 0 && view.kind === "input" ? "" : undefined}
           aria-live="polite"
         >
+          {turns.map((turn, i) => {
+            const latest = i === turns.length - 1;
+            return (
+              <article key={i} className="turn" ref={latest ? lastTurnRef : undefined}>
+                {latest && <VoiceButton voice={voice} onToggle={toggleVoice} />}
+                <p className="question" data-voice={turn.question === null ? "" : undefined}>
+                  {turn.question ?? "Voice question"}
+                </p>
+                <AnswerView answer={turn.answer} />
+              </article>
+            );
+          })}
           {listening ? (
             <p className="status listening">
               <span className="rec-dot" aria-hidden="true" />
               Listening … release to send
             </p>
           ) : (
-            <ViewContent view={view} voice={voice} onToggleVoice={toggleVoice} />
+            <StatusView view={view} />
           )}
         </section>
       )}
@@ -365,15 +399,7 @@ function App() {
   );
 }
 
-function ViewContent({
-  view,
-  voice,
-  onToggleVoice,
-}: {
-  view: View;
-  voice: Voice;
-  onToggleVoice: () => void;
-}) {
+function StatusView({ view }: { view: View }) {
   switch (view.kind) {
     case "loading":
       return (
@@ -394,13 +420,6 @@ function ViewContent({
         <p className="status status-error" role="alert">
           {view.message}
         </p>
-      );
-    case "answer":
-      return (
-        <>
-          <VoiceButton voice={voice} onToggle={onToggleVoice} />
-          <AnswerView answer={view.answer} />
-        </>
       );
     default:
       return null;

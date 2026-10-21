@@ -82,22 +82,28 @@ fn schema() -> Value {
 /// Ohne getippte Frage steht sie in der Sprachaufnahme.
 const AUDIO_QUESTION: &str = "The question is in the attached voice recording. Answer in the language that is spoken. If the recording is unintelligible or empty, set needsClarification.";
 
-pub async fn ask(
-    key: &str,
-    question: Option<&str>,
-    audio: Option<(&[u8], &str)>,
-    screenshot: Option<&[u8]>,
-) -> Result<Answer, AskError> {
-    let text = question.unwrap_or(AUDIO_QUESTION);
-    let mut input = vec![json!({ "type": "text", "text": text })];
+/// Eine Nutzer-Nachricht: getippte Frage oder Sprachaufnahme, beim ersten Mal mit Screenshot.
+pub fn user_step(question: Option<&str>, audio: Option<(&[u8], &str)>, screenshot: Option<&[u8]>) -> Value {
+    let b64 = |bytes: &[u8]| base64::engine::general_purpose::STANDARD.encode(bytes);
+    let mut content = vec![json!({ "type": "text", "text": question.unwrap_or(AUDIO_QUESTION) })];
     if let Some((bytes, mime)) = audio {
-        let data = base64::engine::general_purpose::STANDARD.encode(bytes);
-        input.push(json!({ "type": "audio", "data": data, "mime_type": mime }));
+        content.push(json!({ "type": "audio", "data": b64(bytes), "mime_type": mime }));
     }
     if let Some(png) = screenshot {
-        let data = base64::engine::general_purpose::STANDARD.encode(png);
-        input.push(json!({ "type": "image", "data": data, "mime_type": "image/png" }));
+        content.push(json!({ "type": "image", "data": b64(png), "mime_type": "image/png" }));
     }
+    json!({ "type": "user_input", "content": content })
+}
+
+/// Die Antwort des Modells als Schritt für den Verlauf.
+pub fn model_step(text: &str) -> Value {
+    json!({ "type": "model_output", "content": [{ "type": "text", "text": text }] })
+}
+
+/// Frage stellen. Der Verlauf wird jedes Mal komplett mitgeschickt, Google speichert
+/// nichts (`store: false`). Liefert die Antwort und ihren Rohtext für den Verlauf.
+pub async fn ask(key: &str, history: &[Value], step: &Value) -> Result<(Answer, String), AskError> {
+    let input: Vec<&Value> = history.iter().chain([step]).collect();
     let body = post(key, &MODELS, |model| {
         json!({
             "model": model,
@@ -197,10 +203,12 @@ fn output_blocks(body: &str, kind: &str) -> Result<Vec<Value>, AskError> {
         .collect())
 }
 
-fn parse_answer(body: &str) -> Result<Answer, AskError> {
+fn parse_answer(body: &str) -> Result<(Answer, String), AskError> {
     let text: String = output_blocks(body, "text")?
         .iter()
         .filter_map(|c| c["text"].as_str())
         .collect();
-    serde_json::from_str(&text).map_err(|e| AskError::Failed(format!("Response has the wrong format: {e}")))
+    let answer = serde_json::from_str(&text)
+        .map_err(|e| AskError::Failed(format!("Response has the wrong format: {e}")))?;
+    Ok((answer, text))
 }
