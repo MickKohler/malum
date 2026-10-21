@@ -62,6 +62,10 @@ function App() {
   const [keyText, setKeyText] = useState("");
   const [view, setView] = useState<View>({ kind: "input" });
   const [turns, setTurns] = useState<Turn[]>([]);
+  /** Vorschau des Fensters, das mit der ersten Frage gesendet wird. */
+  const [preview, setPreview] = useState<string | null>(null);
+  /** Zählt Einblendungen, damit eine späte Vorschau nicht in der nächsten landet. */
+  const shown = useRef(0);
   const panelRef = useRef<HTMLElement>(null);
   const lastTurnRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -92,6 +96,7 @@ function App() {
       stopVoice();
       setView({ kind: "input" });
       setTurns([]);
+      loadPreview();
       setPhase("in");
       focusInput();
     };
@@ -165,6 +170,26 @@ function App() {
   useEffect(() => {
     if (view.kind === "input" || view.kind === "key") inputRef.current?.focus();
   }, [view.kind]);
+
+  function loadPreview() {
+    const id = ++shown.current;
+    setPreview((old) => {
+      if (old) URL.revokeObjectURL(old);
+      return null;
+    });
+    invoke<ArrayBuffer>("screenshot_preview").then((png) => {
+      if (id !== shown.current || png.byteLength === 0) return;
+      setPreview(URL.createObjectURL(new Blob([png], { type: "image/png" })));
+    });
+  }
+
+  function removePreview() {
+    void invoke("discard_screenshot");
+    setPreview((old) => {
+      if (old) URL.revokeObjectURL(old);
+      return null;
+    });
+  }
 
   function setListeningBoth(value: boolean) {
     listeningRef.current = value;
@@ -364,15 +389,37 @@ function App() {
         </button>
       </form>
 
-      {!error && (listening || turns.length > 0 || view.kind !== "input") && (
+      {!error && (preview || listening || turns.length > 0 || view.kind !== "input") && (
         <section
           ref={panelRef}
           className="panel"
           data-phase={phase}
           // Nur Zuhören, sonst nichts: erst nach der Tipp-Grenze zeigen.
-          data-listening-only={listening && turns.length === 0 && view.kind === "input" ? "" : undefined}
+          data-listening-only={
+            listening && !preview && turns.length === 0 && view.kind === "input" ? "" : undefined
+          }
           aria-live="polite"
         >
+          {preview && (
+            <div className="shot">
+              <img src={preview} alt="Screenshot of the window" />
+              <span>{turns.length === 0 ? "This window will be sent with your question" : "Shared window"}</span>
+              {turns.length === 0 && (
+                <button
+                  type="button"
+                  className="shot-remove"
+                  title="Don't send this window"
+                  aria-label="Don't send this window"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={removePreview}
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M7 7l10 10M17 7L7 17" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          )}
           {turns.map((turn, i) => {
             const latest = i === turns.length - 1;
             return (

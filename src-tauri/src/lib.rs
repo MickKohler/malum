@@ -5,7 +5,6 @@ mod gemini;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use tauri::async_runtime::JoinHandle;
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::webview::{PermissionKind, PermissionResponse};
@@ -52,8 +51,8 @@ struct OverlayState {
     pressed_at: Option<Instant>,
     /// Das Overlay war beim Drücken schon offen und vorne: kurzes Tippen schließt es.
     tap_dismisses: bool,
-    /// Läuft gerade: Screenshot des Fensters, das vor dem Overlay vorne war.
-    capture: Option<JoinHandle<Option<Vec<u8>>>>,
+    /// Screenshot des Fensters, das vor dem Overlay vorne war, läuft gerade.
+    capturing: bool,
     /// Fertiger Screenshot der Sitzung. Nur im Speicher.
     screenshot: Option<Arc<Vec<u8>>>,
     /// Bisherige Fragen und Antworten der Sitzung, für Rückfragen mit Kontext.
@@ -70,9 +69,7 @@ impl OverlayState {
         for cancel in self.cancel.drain(..) {
             cancel();
         }
-        if let Some(task) = self.capture.take() {
-            task.abort();
-        }
+        self.capturing = false;
         self.screenshot = None;
         self.history.clear();
         self.session += 1;
@@ -120,13 +117,23 @@ fn show_overlay(app: &AppHandle, target: Option<isize>) {
         state.open = true;
         state.sticky = false;
         state.shown_at = Some(Instant::now());
-        state.capture = target.map(|hwnd| {
+        if let Some(hwnd) = target {
+            state.capturing = true;
+            let session = state.session;
+            let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || {
-                capture::capture_png(hwnd)
+                let png = capture::capture_png(hwnd)
                     .inspect_err(|err| eprintln!("Screenshot failed: {err}"))
-                    .ok()
-            })
-        });
+                    .ok();
+                let state = app.state::<SharedState>();
+                let mut state = state.lock().unwrap();
+                // Inzwischen neue Sitzung: Bild verwerfen.
+                if state.session == session {
+                    state.screenshot = png.map(Arc::new);
+                    state.capturing = false;
+                }
+            });
+        }
     }
     let _ = window.set_size(LogicalSize::new(OVERLAY_WIDTH, OVERLAY_MIN_HEIGHT));
     dock_on_cursor_monitor(app, &window);
@@ -308,11 +315,7 @@ async fn ask(
         .map_err(AskError::Failed)?
         .ok_or(AskError::KeyMissing)?;
 
-    let pending = app.state::<SharedState>().lock().unwrap().capture.take();
-    if let Some(task) = pending {
-        let png = task.await.ok().flatten();
-        app.state::<SharedState>().lock().unwrap().screenshot = png.map(Arc::new);
-    }
+    wait_for_capture(&app).await;
     let (screenshot, history, session) = {
         let state = app.state::<SharedState>();
         let state = state.lock().unwrap();
@@ -335,6 +338,30 @@ async fn ask(
         state.history.extend(step);
     }
     Ok(answer)
+}
+
+/// Warten, bis der Screenshot beim Einblenden fertig ist (meist unter 200 ms).
+async fn wait_for_capture(app: &AppHandle) {
+    for _ in 0..100 {
+        if !app.state::<SharedState>().lock().unwrap().capturing {
+            return;
+        }
+        let _ = tauri::async_runtime::spawn_blocking(|| std::thread::sleep(Duration::from_millis(20))).await;
+    }
+}
+
+/// Vorschau des Screenshots, der mit der ersten Frage gesendet wird. Leer, wenn es keinen gibt.
+#[tauri::command]
+async fn screenshot_preview(app: AppHandle) -> tauri::ipc::Response {
+    wait_for_capture(&app).await;
+    let png = app.state::<SharedState>().lock().unwrap().screenshot.clone();
+    tauri::ipc::Response::new(png.map(|p| p.to_vec()).unwrap_or_default())
+}
+
+/// Screenshot nicht senden.
+#[tauri::command]
+fn discard_screenshot(state: State<'_, SharedState>) {
+    state.lock().unwrap().screenshot = None;
 }
 
 /// Text vorlesen. Gibt die WAV-Datei als rohe Bytes ans Frontend.
@@ -434,6 +461,8 @@ pub fn run() {
             startup_error,
             set_overlay_height,
             set_sticky,
+            screenshot_preview,
+            discard_screenshot,
             save_api_key,
             ask,
             speak
