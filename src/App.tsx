@@ -40,15 +40,15 @@ type View =
 function errorMessage(error: AskError): string {
   switch (error.kind) {
     case "rateLimited":
-      return "Gratis-Limit erreicht. Warte eine Minute und versuch es dann nochmal.";
+      return "Free quota reached. Wait a minute and try again.";
     case "overloaded":
-      return "Gemini ist gerade überlastet. Versuch es gleich nochmal.";
+      return "Gemini is overloaded right now. Try again in a moment.";
     case "offline":
-      return "Keine Verbindung zu Gemini. Ist das Internet an?";
+      return "Can't reach Gemini. Are you online?";
     case "failed":
-      return `Etwas ist schiefgegangen: ${error.message}`;
+      return `Something went wrong: ${error.message}`;
     default:
-      return "Etwas ist schiefgegangen.";
+      return "Something went wrong.";
   }
 }
 
@@ -181,7 +181,7 @@ function App() {
     setListeningBoth(false);
     const recording = await recorder.current.stop();
     if (recording) void ask({ audio: recording });
-    else setView({ kind: "error", message: "Es wurde nichts aufgenommen." });
+    else setView({ kind: "error", message: "Nothing was recorded." });
   }
 
   function stopVoice() {
@@ -211,7 +211,7 @@ function App() {
     } catch (e) {
       if (id !== session.current) return;
       // Vorlesen ist Zusatz: Fehler leise anzeigen, die Antwort bleibt stehen.
-      console.error("Vorlesen fehlgeschlagen", e);
+      console.error("Read-aloud failed", e);
       setVoice("off");
     }
   }
@@ -300,7 +300,7 @@ function App() {
             type="password"
             value={keyText}
             onChange={(e) => setKeyText(e.currentTarget.value)}
-            placeholder="Gemini-API-Key einfügen, dann Enter"
+            placeholder="Paste your Gemini API key, then press Enter"
             spellCheck={false}
             autoComplete="off"
           />
@@ -311,7 +311,7 @@ function App() {
             className="prompt"
             value={text}
             onChange={(e) => setText(e.currentTarget.value)}
-            placeholder="Frag etwas …"
+            placeholder="Ask anything …"
             spellCheck={false}
             autoComplete="off"
           />
@@ -319,8 +319,8 @@ function App() {
         <button
           type="button"
           className="mic"
-          title="Sprechen: Strg+Umschalt+Leertaste gedrückt halten (oder hier klicken)"
-          aria-label={listening ? "Aufnahme senden" : "Aufnahme starten"}
+          title="Speak: hold Ctrl+Shift+Space (or click here)"
+          aria-label={listening ? "Send recording" : "Start recording"}
           aria-pressed={listening}
           tabIndex={-1}
           // Fokus im Eingabefeld lassen.
@@ -335,7 +335,7 @@ function App() {
         <button
           type="button"
           className="hint"
-          title="Schließen (Esc)"
+          title="Close (Esc)"
           tabIndex={-1}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => void invoke("request_dismiss")}
@@ -354,7 +354,7 @@ function App() {
           {listening ? (
             <p className="status listening">
               <span className="rec-dot" aria-hidden="true" />
-              Ich höre zu … loslassen zum Senden
+              Listening … release to send
             </p>
           ) : (
             <ViewContent view={view} voice={voice} onToggleVoice={toggleVoice} />
@@ -378,15 +378,15 @@ function ViewContent({
     case "loading":
       return (
         <p className="status">
-          <span className="shimmer">Schaue mir das an …</span>
+          <span className="shimmer">Taking a look …</span>
         </p>
       );
     case "key":
       return (
         <p className="status">
           {view.invalid
-            ? "Der gespeicherte Key wird nicht akzeptiert. Füge einen gültigen Key ein."
-            : "Einmalig: Füge deinen Gemini-API-Key ein. Er wird sicher in Windows gespeichert."}
+            ? "The saved key was rejected. Paste a valid key."
+            : "One-time setup: paste your Gemini API key. It is stored securely in Windows."}
         </p>
       );
     case "error":
@@ -408,7 +408,7 @@ function ViewContent({
 }
 
 function VoiceButton({ voice, onToggle }: { voice: Voice; onToggle: () => void }) {
-  const label = voice === "off" ? "Vorlesen" : "Vorlesen stoppen";
+  const label = voice === "off" ? "Read aloud" : "Stop reading";
   return (
     <button
       type="button"

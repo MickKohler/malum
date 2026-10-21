@@ -117,7 +117,7 @@ fn show_overlay(app: &AppHandle, target: Option<isize>) {
         state.capture = target.map(|hwnd| {
             tauri::async_runtime::spawn_blocking(move || {
                 capture::capture_png(hwnd)
-                    .inspect_err(|err| eprintln!("Screenshot fehlgeschlagen: {err}"))
+                    .inspect_err(|err| eprintln!("Screenshot failed: {err}"))
                     .ok()
             })
         });
@@ -187,17 +187,17 @@ fn shortcut_released(app: &AppHandle) {
 
 /// Tray-Icon mit Menü. Linksklick blendet das Overlay ein, Rechtsklick zeigt das Menü.
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
-    let open = MenuItem::with_id(app, "open", "Öffnen\tStrg+Umschalt+Leertaste", true, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", "Open\tCtrl+Shift+Space", true, None::<&str>)?;
     let autostart_on = app.autolaunch().is_enabled().unwrap_or(false);
     let autostart = CheckMenuItem::with_id(
         app,
         "autostart",
-        "Mit Windows starten",
+        "Start with Windows",
         true,
         autostart_on,
         None::<&str>,
     )?;
-    let quit = MenuItem::with_id(app, "quit", "Beenden", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let menu = Menu::with_items(app, &[&open, &separator, &autostart, &separator, &quit])?;
 
@@ -239,7 +239,7 @@ fn set_autostart(app: &AppHandle, item: &CheckMenuItem<tauri::Wry>) {
     let autolaunch = app.autolaunch();
     let result = if want { autolaunch.enable() } else { autolaunch.disable() };
     if let Err(err) = result {
-        eprintln!("Autostart konnte nicht geändert werden: {err}");
+        eprintln!("Could not change autostart: {err}");
         let _ = item.set_checked(autolaunch.is_enabled().unwrap_or(false));
     }
 }
@@ -284,7 +284,7 @@ fn set_sticky(state: State<'_, SharedState>, sticky: bool) {
 fn save_api_key(key: String) -> Result<(), String> {
     let key = key.trim();
     if key.is_empty() {
-        return Err("Bitte einen Key einfügen".into());
+        return Err("Please paste a key".into());
     }
     credentials::save_api_key(key)
 }
@@ -385,7 +385,7 @@ pub fn run() {
                 if let Err(err) = app.global_shortcut().register(toggle) {
                     // Sichtbar machen statt still zu scheitern (z. B. Shortcut schon belegt).
                     let message = format!(
-                        "Shortcut Strg+Umschalt+Leertaste konnte nicht registriert werden: {err}"
+                        "Could not register the shortcut Ctrl+Shift+Space: {err}"
                     );
                     eprintln!("{message}");
                     app.state::<SharedState>().lock().unwrap().startup_error = Some(message);

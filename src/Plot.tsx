@@ -74,7 +74,7 @@ export function Plot(props: Props) {
   const curve = useMemo(() => sample(props), [props.expr, props.xMin, props.xMax]);
 
   if (!curve) {
-    return <p className="plot-note">Plot nicht möglich: {props.expr}</p>;
+    return <p className="plot-note">Can't plot: {props.expr}</p>;
   }
   const { paths, yMin, yMax, toX, toY } = curve;
   const showXAxis = yMin < 0 && yMax > 0;

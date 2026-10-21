@@ -31,11 +31,11 @@ export class Recorder {
         const name = (e as DOMException).name;
         if (name === "NotAllowedError") {
           throw new MicError(
-            "Mikrofon nicht erlaubt. Windows-Einstellungen > Datenschutz > Mikrofon: Zugriff für Desktop-Apps einschalten.",
+            "Microphone blocked. Windows Settings > Privacy > Microphone: allow desktop apps to access your microphone.",
           );
         }
-        if (name === "NotFoundError") throw new MicError("Kein Mikrofon gefunden.");
-        throw new MicError(`Mikrofon nicht verfügbar (${name}).`);
+        if (name === "NotFoundError") throw new MicError("No microphone found.");
+        throw new MicError(`Microphone unavailable (${name}).`);
       }
       const recorder = new MediaRecorder(stream, { mimeType: MIME });
       recorder.ondataavailable = (e) => {

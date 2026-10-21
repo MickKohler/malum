@@ -22,10 +22,10 @@ pub fn load_api_key() -> Result<Option<String>, String> {
             };
             String::from_utf8(blob)
                 .map(Some)
-                .map_err(|_| "Gespeicherter Key ist beschädigt".into())
+                .map_err(|_| "Saved key is corrupted".into())
         }
         Err(e) if e.code() == ERROR_NOT_FOUND.to_hresult() => Ok(None),
-        Err(e) => Err(format!("Key konnte nicht gelesen werden: {}", e.message())),
+        Err(e) => Err(format!("Could not read the key: {}", e.message())),
     }
 }
 
@@ -43,5 +43,5 @@ pub fn save_api_key(key: &str) -> Result<(), String> {
         ..Default::default()
     };
     unsafe { CredWriteW(&cred, 0) }
-        .map_err(|e| format!("Key konnte nicht gespeichert werden: {}", e.message()))
+        .map_err(|e| format!("Could not save the key: {}", e.message()))
 }

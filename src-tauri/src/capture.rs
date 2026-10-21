@@ -37,13 +37,13 @@ pub fn capture_png(window: isize) -> Result<Vec<u8>, String> {
     let hwnd = HWND(window as *mut _);
     unsafe {
         if IsIconic(hwnd).as_bool() {
-            return Err("Fenster ist minimiert".into());
+            return Err("window is minimized".into());
         }
         let mut rect = RECT::default();
         GetWindowRect(hwnd, &mut rect).map_err(|e| e.to_string())?;
         let (width, height) = (rect.right - rect.left, rect.bottom - rect.top);
         if width <= 0 || height <= 0 {
-            return Err("Fenster hat keine Größe".into());
+            return Err("window has no size".into());
         }
         let (out_w, out_h) = if width > MAX_WIDTH {
             (MAX_WIDTH, (height as i64 * MAX_WIDTH as i64 / width as i64) as i32)
@@ -99,7 +99,7 @@ pub fn capture_png(window: isize) -> Result<Vec<u8>, String> {
         ReleaseDC(None, screen);
 
         if !printed || !stretched || lines == 0 {
-            return Err("Fenster konnte nicht aufgenommen werden".into());
+            return Err("window could not be captured".into());
         }
         encode_png(&bgra, out_w as u32, out_h as u32)
     }

@@ -16,17 +16,13 @@ const TTS_VOICE: &str = "Kore";
 const RETRY_PAUSE: Duration = Duration::from_secs(2);
 const TIMEOUT: Duration = Duration::from_secs(60);
 
-const SYSTEM: &str = "Du bist ein Tutor für Mathe-Übungsblätter. Du bekommst meist einen \
-Screenshot des Fensters, das der Nutzer gerade offen hat, und eine Frage. Antworte in der \
-Sprache der Frage (Deutsch oder Englisch).
-Regeln:
-- \"spoken\" ist der Text, der vorgelesen wird. Formeln darin in Worten, nie LaTeX.
-- \"steps\" sind kurze Stichpunkte zum Lösungsweg. Formeln darin in $...$ (LaTeX).
-- \"formulas\" sind die wichtigsten Formeln als LaTeX (KaTeX-kompatibel).
-- \"plot\" nur, wenn ein Plot gewünscht ist oder klar hilft. \"expr\" muss mathjs-parsebar \
-sein und x als Variable nutzen. Du zeichnest nicht selbst.
-- Ist unklar, welche Aufgabe gemeint ist, oder ist etwas nicht lesbar, setze \
-\"needsClarification\" auf eine kurze Rückfrage, sonst null.";
+const SYSTEM: &str = "You are a tutor for math exercise sheets. You usually get a screenshot of the window the user has open, plus a question. Answer in the language of the question (e.g. German or English).
+Rules:
+- \"spoken\" is the text that will be read aloud. Write formulas in words, never LaTeX.
+- \"steps\" are short bullet points for the solution. Formulas in them go in $...$ (LaTeX).
+- \"formulas\" are the key formulas as LaTeX (KaTeX-compatible).
+- \"plot\" only if a plot is requested or clearly helps. \"expr\" must be parseable by mathjs and use x as the variable. You do not draw anything yourself.
+- If it is unclear which exercise is meant, or something is unreadable, set \"needsClarification\" to a short follow-up question, otherwise null.";
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -84,7 +80,7 @@ fn schema() -> Value {
 }
 
 /// Ohne getippte Frage steht sie in der Sprachaufnahme.
-const AUDIO_QUESTION: &str = "Die Frage steht in der angehängten Sprachaufnahme. Antworte in der Sprache, in der gesprochen wird. Ist die Aufnahme unverständlich oder leer, setze needsClarification.";
+const AUDIO_QUESTION: &str = "The question is in the attached voice recording. Answer in the language that is spoken. If the recording is unintelligible or empty, set needsClarification.";
 
 pub async fn ask(
     key: &str,
@@ -135,10 +131,10 @@ pub async fn speak(key: &str, text: &str) -> Result<Vec<u8>, AskError> {
         .last()
         .and_then(|c| c["data"].as_str())
         .map(str::to_owned)
-        .ok_or_else(|| AskError::Failed("Keine Audiodaten in der Antwort".into()))?;
+        .ok_or_else(|| AskError::Failed("No audio in the response".into()))?;
     base64::engine::general_purpose::STANDARD
         .decode(audio)
-        .map_err(|e| AskError::Failed(format!("Audio unlesbar: {e}")))
+        .map_err(|e| AskError::Failed(format!("Unreadable audio: {e}")))
 }
 
 /// Anfrage senden, bei Überlastung (503) mit dem nächsten Modell der Liste.
@@ -189,7 +185,7 @@ async fn post(key: &str, models: &[&str], body: impl Fn(&str) -> Value) -> Resul
 /// Inhaltsblöcke eines Typs ("text", "audio") aus den Ausgabeschritten.
 fn output_blocks(body: &str, kind: &str) -> Result<Vec<Value>, AskError> {
     let interaction: Value =
-        serde_json::from_str(body).map_err(|e| AskError::Failed(format!("Antwort unlesbar: {e}")))?;
+        serde_json::from_str(body).map_err(|e| AskError::Failed(format!("Unreadable response: {e}")))?;
     Ok(interaction["steps"]
         .as_array()
         .into_iter()
@@ -206,5 +202,5 @@ fn parse_answer(body: &str) -> Result<Answer, AskError> {
         .iter()
         .filter_map(|c| c["text"].as_str())
         .collect();
-    serde_json::from_str(&text).map_err(|e| AskError::Failed(format!("Antwort hat falsches Format: {e}")))
+    serde_json::from_str(&text).map_err(|e| AskError::Failed(format!("Response has the wrong format: {e}")))
 }
