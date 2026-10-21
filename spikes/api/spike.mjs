@@ -28,7 +28,7 @@ const SYSTEM = `Du bist ein Tutor für Mathe-Übungsblätter. Du bekommst einen 
 und eine Frage. Antworte in der Sprache der Frage (Deutsch oder Englisch).
 Regeln:
 - "spoken" ist der Text, der vorgelesen wird. Formeln darin in Worten, nie LaTeX.
-- "steps" sind kurze Stichpunkte zum Lösungsweg.
+- "steps" sind kurze Stichpunkte zum Lösungsweg. Formeln darin in $...$ (LaTeX).
 - "formulas" sind die wichtigsten Formeln als LaTeX (KaTeX-kompatibel).
 - "plot" nur, wenn ein Plot gewünscht ist oder klar hilft. "expr" muss mathjs-parsebar
   sein und x als Variable nutzen. Du zeichnest nicht selbst.

@@ -56,6 +56,7 @@ Plot-Beispiel: `"plot": {"expr": "x^2*sin(x)", "xMin": -5, "xMax": 5, "label": "
 
 Regeln:
 - `spoken` enthält Formeln in Worten, nie LaTeX, sonst liest die Stimme Zeichen vor.
+- `steps` dürfen kurze Formeln in `$...$` enthalten; die App stellt sie mit KaTeX dar.
 - `plot.expr` muss mathjs-parsebar sein. Die App zeichnet selbst, das Modell malt nicht.
 - Bei Unsicherheit (welche Aufgabe? Funktion nicht lesbar?) setzt das Modell
   `needsClarification` mit einer kurzen Rückfrage.
@@ -106,7 +107,9 @@ Ausblend-Animation, Esc und Fokusverlust schließen. Tray-Icon mit Menü (Öffne
 Mit Windows starten, Beenden), nur eine laufende Instanz. Mikrofon-Symbol in der
 Leiste, bisher nur Optik. Installer als NSIS. Der Shortcut reagiert bisher nur auf
 "gedrückt"; Push-to-talk ("losgelassen") fehlt noch.
-Offen: `.env` mit Gemini-Key, API-Spike (Abend 3). Siehe WOCHE-1-CHECKLISTE.md.
+API-Spike (Abend 3) ohne Audio erledigt (`spikes/api/spike.mjs`): Screenshot plus
+Textfrage liefert brauchbares JSON, deutsche TTS klingt gut. `.env` mit Gemini-Key liegt lokal.
+Offen: Test mit Sprachaufnahme (Audio plus Bild). Siehe WOCHE-1-CHECKLISTE.md.
 
 ## Entscheidungslog
 
@@ -139,3 +142,19 @@ Offen: `.env` mit Gemini-Key, API-Spike (Abend 3). Siehe WOCHE-1-CHECKLISTE.md.
   blendet das Overlay der laufenden App ein, statt am belegten Shortcut zu scheitern).
 - 2026-10-20, Installer nur als NSIS, kein MSI. Grund: spart den WiX-Download,
   ein Installer reicht.
+- 2026-10-21, Claude API vorerst nicht. Grund: kein Gratis-Tarif (Pro-Abo enthält
+  keine API), kein Audio-Eingang, keine TTS. Bleibt als möglicher Anbieter hinter dem
+  Interface, z. B. falls Gemini Formeln schlecht liest.
+- 2026-10-21, GitHub-Repo bleibt privat. Grund: Uni-Mail in allen Commits, Name
+  ungeprüft, keine Lizenz. Später gemeinsam klären.
+- 2026-10-21, API-Spike ohne Audio: Interactions-API (`v1beta/interactions`) mit
+  `response_format` (JSON-Schema) funktioniert per einfachem fetch, kein SDK nötig.
+  Key im neuen Format (`AQ.`). Ergebnis mit `gemini-3.6-flash`: Aufgabe 1b richtig
+  gelöst, 1a richtig gelesen und als mathjs-Ausdruck geplottet, Sprache erkannt,
+  `spoken` ohne LaTeX. Dauer 10 bis 15 s pro Antwort (davon viel Denkzeit), TTS
+  (`gemini-3.8-flash-tts`, Stimme Kore, WAV 24 kHz) 8 s, Qualität auf Deutsch gut.
+- 2026-10-21, `gemini-3.8-flash` war während des ganzen Spikes überlastet (HTTP 503),
+  auch `3.6-flash` zeitweise. Folge für die App: Wiederholversuche, Ersatzmodell in
+  den Einstellungen, sichtbare Meldung "Modell überlastet".
+- 2026-10-21, Antwortzeit ist das nächste Risiko für "smooth". Später prüfen:
+  Streaming, weniger Denkzeit (`thinking_level`), Text zeigen während TTS läuft.
