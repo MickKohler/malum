@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Formula, MathText } from "./Math";
 import { Plot } from "./Plot";
+import { MicError, Recorder, type Recording } from "./recorder";
 import "./App.css";
 
 /** Muss zur Dauer der Ausblend-Transition in App.css passen. */
@@ -25,6 +26,9 @@ type AskError =
   | { kind: "failed"; message: string };
 
 type Voice = "off" | "loading" | "playing";
+
+/** Getippte Frage oder Sprachaufnahme. */
+type Question = { text: string } | { audio: Recording };
 
 type View =
   | { kind: "input" }
@@ -58,7 +62,10 @@ function App() {
   const stageRef = useRef<HTMLElement>(null);
   const hideTimer = useRef<number | undefined>(undefined);
   /** Frage, die nach dem Speichern des Keys gestellt wird. */
-  const pendingQuestion = useRef<string | null>(null);
+  const pendingQuestion = useRef<Question | null>(null);
+  const recorder = useRef(new Recorder());
+  const [listening, setListening] = useState(false);
+  const listeningRef = useRef(false);
   const [voice, setVoice] = useState<Voice>("off");
   const audio = useRef<HTMLAudioElement | null>(null);
   /** Zählt Fragen hoch, damit eine verspätete Sprachausgabe nicht mehr abgespielt wird. */
@@ -84,6 +91,7 @@ function App() {
 
     const exit = () => {
       stopVoice();
+      stopListening();
       setPhase("out");
       window.clearTimeout(hideTimer.current);
       hideTimer.current = window.setTimeout(() => {
@@ -93,6 +101,8 @@ function App() {
 
     const unlistenShow = listen("overlay-show", enter);
     const unlistenDismiss = listen("overlay-dismiss", exit);
+    const unlistenPttStart = listen("ptt-start", startListening);
+    const unlistenPttEnd = listen<boolean>("ptt-end", (e) => void endListening(e.payload));
 
     invoke<string | null>("startup_error").then((message) => {
       if (message) {
@@ -113,6 +123,8 @@ function App() {
       window.clearTimeout(hideTimer.current);
       void unlistenShow.then((off) => off());
       void unlistenDismiss.then((off) => off());
+      void unlistenPttStart.then((off) => off());
+      void unlistenPttEnd.then((off) => off());
       window.removeEventListener("keydown", onKeyDown);
     };
   }, []);
@@ -136,6 +148,41 @@ function App() {
   useEffect(() => {
     if (view.kind === "input" || view.kind === "key") inputRef.current?.focus();
   }, [view.kind]);
+
+  function setListeningBoth(value: boolean) {
+    listeningRef.current = value;
+    setListening(value);
+  }
+
+  function startListening() {
+    stopVoice();
+    setListeningBoth(true);
+    recorder.current.start().catch((e) => {
+      // Nur melden, wenn noch jemand zuhört (nicht nach kurzem Tippen).
+      if (!listeningRef.current) return;
+      setListeningBoth(false);
+      setView({ kind: "error", message: e instanceof MicError ? e.message : String(e) });
+    });
+  }
+
+  function stopListening() {
+    recorder.current.cancel();
+    setListeningBoth(false);
+  }
+
+  /** `send`: lang gehalten, Aufnahme abschicken. Sonst nur verwerfen. */
+  async function endListening(send: boolean) {
+    if (!listeningRef.current) return;
+    if (!send) {
+      stopListening();
+      inputRef.current?.focus();
+      return;
+    }
+    setListeningBoth(false);
+    const recording = await recorder.current.stop();
+    if (recording) void ask({ audio: recording });
+    else setView({ kind: "error", message: "Es wurde nichts aufgenommen." });
+  }
 
   function stopVoice() {
     session.current++;
@@ -169,12 +216,17 @@ function App() {
     }
   }
 
-  async function ask(question: string) {
+  async function ask(question: Question) {
     stopVoice();
     const id = session.current;
     setView({ kind: "loading" });
     try {
-      const answer = await invoke<Answer>("ask", { question });
+      const answer = await invoke<Answer>(
+        "ask",
+        "text" in question
+          ? { question: question.text, audio: null, audioMime: null }
+          : { question: null, audio: Array.from(question.audio.bytes), audioMime: question.audio.mime },
+      );
       if (id !== session.current) return;
       setView({ kind: "answer", answer });
       void speak(answer.needsClarification ?? answer.spoken);
@@ -214,7 +266,13 @@ function App() {
       return;
     }
     const question = text.trim();
-    if (question) void ask(question);
+    if (question) void ask({ text: question });
+  }
+
+  function toggleVoice() {
+    if (view.kind !== "answer") return;
+    if (voice === "off") void speak(view.answer.needsClarification ?? view.answer.spoken);
+    else stopVoice();
   }
 
   const askingForKey = view.kind === "key";
@@ -226,6 +284,7 @@ function App() {
         data-phase={phase}
         data-error={error ? "" : undefined}
         data-busy={view.kind === "loading" ? "" : undefined}
+        data-listening={listening ? "" : undefined}
         onSubmit={onSubmit}
       >
         <span className="orb" aria-hidden="true" />
@@ -257,16 +316,16 @@ function App() {
             autoComplete="off"
           />
         )}
-        {/* Nur Optik. Push-to-talk kommt als eigenes Feature. */}
         <button
           type="button"
           className="mic"
-          title="Spracheingabe folgt"
-          aria-label="Spracheingabe (folgt)"
-          aria-disabled="true"
+          title="Sprechen: Strg+Umschalt+Leertaste gedrückt halten (oder hier klicken)"
+          aria-label={listening ? "Aufnahme senden" : "Aufnahme starten"}
+          aria-pressed={listening}
           tabIndex={-1}
           // Fokus im Eingabefeld lassen.
           onMouseDown={(e) => e.preventDefault()}
+          onClick={() => (listening ? void endListening(true) : startListening())}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <rect x="9" y="3" width="6" height="11" rx="3" />
@@ -285,42 +344,67 @@ function App() {
         </button>
       </form>
 
-      {!error && view.kind !== "input" && (
-        <section className="panel" data-phase={phase} aria-live="polite">
-          {view.kind === "loading" && (
-            <p className="status">
-              <span className="shimmer">Schaue mir das an …</span>
+      {!error && (listening || view.kind !== "input") && (
+        <section
+          className="panel"
+          data-phase={phase}
+          data-listening={listening ? "" : undefined}
+          aria-live="polite"
+        >
+          {listening ? (
+            <p className="status listening">
+              <span className="rec-dot" aria-hidden="true" />
+              Ich höre zu … loslassen zum Senden
             </p>
-          )}
-          {view.kind === "key" && (
-            <p className="status">
-              {view.invalid
-                ? "Der gespeicherte Key wird nicht akzeptiert. Füge einen gültigen Key ein."
-                : "Einmalig: Füge deinen Gemini-API-Key ein. Er wird sicher in Windows gespeichert."}
-            </p>
-          )}
-          {view.kind === "error" && (
-            <p className="status status-error" role="alert">
-              {view.message}
-            </p>
-          )}
-          {view.kind === "answer" && (
-            <>
-              <VoiceButton
-                voice={voice}
-                onToggle={() =>
-                  voice === "off"
-                    ? void speak(view.answer.needsClarification ?? view.answer.spoken)
-                    : stopVoice()
-                }
-              />
-              <AnswerView answer={view.answer} />
-            </>
+          ) : (
+            <ViewContent view={view} voice={voice} onToggleVoice={toggleVoice} />
           )}
         </section>
       )}
     </main>
   );
+}
+
+function ViewContent({
+  view,
+  voice,
+  onToggleVoice,
+}: {
+  view: View;
+  voice: Voice;
+  onToggleVoice: () => void;
+}) {
+  switch (view.kind) {
+    case "loading":
+      return (
+        <p className="status">
+          <span className="shimmer">Schaue mir das an …</span>
+        </p>
+      );
+    case "key":
+      return (
+        <p className="status">
+          {view.invalid
+            ? "Der gespeicherte Key wird nicht akzeptiert. Füge einen gültigen Key ein."
+            : "Einmalig: Füge deinen Gemini-API-Key ein. Er wird sicher in Windows gespeichert."}
+        </p>
+      );
+    case "error":
+      return (
+        <p className="status status-error" role="alert">
+          {view.message}
+        </p>
+      );
+    case "answer":
+      return (
+        <>
+          <VoiceButton voice={voice} onToggle={onToggleVoice} />
+          <AnswerView answer={view.answer} />
+        </>
+      );
+    default:
+      return null;
+  }
 }
 
 function VoiceButton({ voice, onToggle }: { voice: Voice; onToggle: () => void }) {

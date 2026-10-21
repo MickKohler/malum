@@ -177,6 +177,33 @@ body,
   color: var(--text);
 }
 
+/* Aufnahme läuft: Kugel und Mikrofon leuchten rot. */
+.bar[data-listening] .orb {
+  background: radial-gradient(circle at 35% 30%, #fff 0 12%, transparent 13%), #ff5f6d;
+  box-shadow: 0 0 14px 0 #ff5f6d;
+  animation: breathe 0.9s ease-in-out infinite;
+}
+
+.bar[data-listening] .mic {
+  color: #ff5f6d;
+  background: rgba(255, 95, 109, 0.12);
+}
+
+.listening {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+}
+
+.rec-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff5f6d;
+  animation: breathe-opacity 1s ease-in-out infinite;
+}
+
 /* Während der Anfrage dreht sich die Kugel schneller. */
 .bar[data-busy] .orb {
   animation:
@@ -211,6 +238,11 @@ body,
   transition: opacity 120ms var(--ease-out);
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+/* Erst nach der Tipp-Grenze (300 ms) zeigen, sonst blitzt es bei kurzem Tippen auf. */
+.panel[data-listening] {
+  animation: panel-in 220ms 280ms var(--ease-in) both;
 }
 
 .panel[data-phase="out"] {
@@ -418,6 +450,8 @@ body,
     animation: none;
   }
   .panel,
+  .rec-dot,
+  .bar[data-listening] .orb,
   .plot .curve,
   .voice[data-voice="loading"] svg {
     animation: none;

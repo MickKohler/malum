@@ -83,8 +83,21 @@ fn schema() -> Value {
     })
 }
 
-pub async fn ask(key: &str, question: &str, screenshot: Option<&[u8]>) -> Result<Answer, AskError> {
-    let mut input = vec![json!({ "type": "text", "text": question })];
+/// Ohne getippte Frage steht sie in der Sprachaufnahme.
+const AUDIO_QUESTION: &str = "Die Frage steht in der angehängten Sprachaufnahme. Antworte in der Sprache, in der gesprochen wird. Ist die Aufnahme unverständlich oder leer, setze needsClarification.";
+
+pub async fn ask(
+    key: &str,
+    question: Option<&str>,
+    audio: Option<(&[u8], &str)>,
+    screenshot: Option<&[u8]>,
+) -> Result<Answer, AskError> {
+    let text = question.unwrap_or(AUDIO_QUESTION);
+    let mut input = vec![json!({ "type": "text", "text": text })];
+    if let Some((bytes, mime)) = audio {
+        let data = base64::engine::general_purpose::STANDARD.encode(bytes);
+        input.push(json!({ "type": "audio", "data": data, "mime_type": mime }));
+    }
     if let Some(png) = screenshot {
         let data = base64::engine::general_purpose::STANDARD.encode(png);
         input.push(json!({ "type": "image", "data": data, "mime_type": "image/png" }));

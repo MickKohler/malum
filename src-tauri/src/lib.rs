@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 use tauri::async_runtime::JoinHandle;
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::webview::{PermissionKind, PermissionResponse};
 use tauri::{
     AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, State, WebviewWindow, WindowEvent,
 };
@@ -34,6 +35,9 @@ const MARGIN_TOP: f64 = 16.0;
 /// Anzeigen manchmal kurz "unfokussiert", bevor der Fokus ankommt).
 const FOCUS_GRACE: Duration = Duration::from_millis(200);
 
+/// Kürzer gedrückt gilt als Tippen (Overlay zum Schreiben), länger als Sprechen.
+const HOLD_THRESHOLD: Duration = Duration::from_millis(300);
+
 #[derive(Default)]
 struct OverlayState {
     /// Logisch geöffnet. Beim Ausblenden wird das sofort `false`, das Fenster
@@ -44,6 +48,10 @@ struct OverlayState {
     /// Eine Antwort ist sichtbar: Klick daneben schließt dann nicht mehr,
     /// damit man ins Übungsblatt schauen kann.
     sticky: bool,
+    /// Shortcut wird gerade gehalten (seit wann).
+    pressed_at: Option<Instant>,
+    /// Das Overlay war beim Drücken schon offen und vorne: kurzes Tippen schließt es.
+    tap_dismisses: bool,
     /// Läuft gerade: Screenshot des Fensters, das vor dem Overlay vorne war.
     capture: Option<JoinHandle<Option<Vec<u8>>>>,
     /// Fertiger Screenshot für weitere Fragen in derselben Sitzung. Nur im Speicher.
@@ -135,16 +143,45 @@ fn dismiss_overlay(app: &AppHandle) {
     let _ = app.emit("overlay-dismiss", ());
 }
 
-/// Shortcut: Ist das Overlay offen und hat den Fokus, schließt er es. Sonst
-/// beginnt eine neue Frage zum Fenster, das gerade vorne ist.
-fn toggle_overlay(app: &AppHandle) {
-    let open = app.state::<SharedState>().lock().unwrap().open;
-    let focused = overlay(app).is_some_and(|w| w.is_focused().unwrap_or(false));
-    if open && focused {
-        dismiss_overlay(app);
-    } else {
+/// Shortcut gedrückt: Aufnahme starten. Ist das Overlay zu oder nicht vorne,
+/// beginnt eine neue Frage zum Fenster, das gerade vorne ist. Was mit der
+/// Aufnahme passiert, entscheidet erst das Loslassen.
+fn shortcut_pressed(app: &AppHandle) {
+    let open = {
+        let state = app.state::<SharedState>();
+        let state = state.lock().unwrap();
+        if state.pressed_at.is_some() {
+            return; // schon gedrückt
+        }
+        state.open
+    };
+    let active = open && overlay(app).is_some_and(|w| w.is_focused().unwrap_or(false));
+    if !active {
         // Vor dem Einblenden merken, welches Fenster vorne ist.
         show_overlay(app, capture::foreground_window());
+    }
+    {
+        let state = app.state::<SharedState>();
+        let mut state = state.lock().unwrap();
+        state.pressed_at = Some(Instant::now());
+        state.tap_dismisses = active;
+    }
+    let _ = app.emit("ptt-start", ());
+}
+
+/// Shortcut losgelassen: lang gehalten = Aufnahme senden, kurz = verwerfen
+/// (und schließen, wenn das Overlay schon vorher offen war).
+fn shortcut_released(app: &AppHandle) {
+    let (pressed_at, tap_dismisses) = {
+        let state = app.state::<SharedState>();
+        let mut state = state.lock().unwrap();
+        (state.pressed_at.take(), state.tap_dismisses)
+    };
+    let Some(pressed_at) = pressed_at else { return };
+    let held = pressed_at.elapsed() >= HOLD_THRESHOLD;
+    let _ = app.emit("ptt-end", held);
+    if !held && tap_dismisses {
+        dismiss_overlay(app);
     }
 }
 
@@ -252,9 +289,15 @@ fn save_api_key(key: String) -> Result<(), String> {
     credentials::save_api_key(key)
 }
 
-/// Frage plus Screenshot an Gemini. Esc oder Schließen bricht die Anfrage ab.
+/// Frage (getippt oder als Sprachaufnahme) plus Screenshot an Gemini. Esc oder
+/// Schließen bricht die Anfrage ab.
 #[tauri::command]
-async fn ask(app: AppHandle, question: String) -> Result<Answer, AskError> {
+async fn ask(
+    app: AppHandle,
+    question: Option<String>,
+    audio: Option<Vec<u8>>,
+    audio_mime: Option<String>,
+) -> Result<Answer, AskError> {
     let key = credentials::load_api_key()
         .map_err(AskError::Failed)?
         .ok_or(AskError::KeyMissing)?;
@@ -267,7 +310,8 @@ async fn ask(app: AppHandle, question: String) -> Result<Answer, AskError> {
     let screenshot = app.state::<SharedState>().lock().unwrap().screenshot.clone();
 
     cancellable(&app, async move {
-        gemini::ask(&key, &question, screenshot.as_deref().map(Vec::as_slice)).await
+        let audio = audio.as_deref().zip(audio_mime.as_deref());
+        gemini::ask(&key, question.as_deref(), audio, screenshot.as_deref().map(Vec::as_slice)).await
     })
     .await
 }
@@ -306,6 +350,12 @@ pub fn run() {
     }
 
     builder
+        // Mikrofon für Push-to-talk ohne Nachfrage der WebView erlauben. Die
+        // Windows-Datenschutzeinstellung für Desktop-Apps gilt trotzdem.
+        .on_permission_request(|_, kind| match kind {
+            PermissionKind::Microphone => PermissionResponse::Allow,
+            _ => PermissionResponse::Default,
+        })
         .plugin(tauri_plugin_opener::init())
         .manage(SharedState::default())
         .setup(|app| {
@@ -321,9 +371,12 @@ pub fn run() {
                 app.handle().plugin(
                     tauri_plugin_global_shortcut::Builder::new()
                         .with_handler(move |app, shortcut, event| {
-                            // Nur "gedrückt" auswerten. "Losgelassen" kommt später für Push-to-talk.
-                            if shortcut == &toggle && event.state() == ShortcutState::Pressed {
-                                toggle_overlay(app);
+                            if shortcut != &toggle {
+                                return;
+                            }
+                            match event.state() {
+                                ShortcutState::Pressed => shortcut_pressed(app),
+                                ShortcutState::Released => shortcut_released(app),
                             }
                         })
                         .build(),
