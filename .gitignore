@@ -26,3 +26,7 @@ dist-ssr
 # Secrets
 .env
 .env.*
+
+# Spike-Testmaterial und -Ausgaben
+spikes/api/input/
+spikes/api/output/
