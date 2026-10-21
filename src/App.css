@@ -219,6 +219,53 @@ body,
   }
 }
 
+/* Lautsprecher oben rechts im Antwortbereich */
+.voice {
+  float: right;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin: -6px -8px 4px 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+  transition:
+    color 140ms ease-out,
+    background-color 140ms ease-out;
+}
+
+.voice:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.voice[data-voice="playing"] {
+  color: var(--accent-b);
+}
+
+.voice[data-voice="loading"] svg {
+  animation: breathe-opacity 1s ease-in-out infinite;
+}
+
+@keyframes breathe-opacity {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.voice svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .status {
   margin: 0;
   color: var(--text-dim);
@@ -366,7 +413,8 @@ body,
     animation: none;
   }
   .panel,
-  .plot .curve {
+  .plot .curve,
+  .voice[data-voice="loading"] svg {
     animation: none;
   }
 }

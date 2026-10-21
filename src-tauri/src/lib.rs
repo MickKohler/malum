@@ -45,14 +45,14 @@ struct OverlayState {
     capture: Option<JoinHandle<Option<Vec<u8>>>>,
     /// Fertiger Screenshot für weitere Fragen in derselben Sitzung. Nur im Speicher.
     screenshot: Option<Arc<Vec<u8>>>,
-    /// Bricht die laufende Gemini-Anfrage ab.
-    cancel_ask: Option<Box<dyn Fn() + Send>>,
+    /// Brechen laufende Gemini-Anfragen (Antwort, Vorlesen) ab.
+    cancel: Vec<Box<dyn Fn() + Send>>,
 }
 
 impl OverlayState {
     /// Sitzung beenden: Anfrage abbrechen, Screenshot verwerfen.
     fn end_session(&mut self) {
-        if let Some(cancel) = self.cancel_ask.take() {
+        for cancel in self.cancel.drain(..) {
             cancel();
         }
         if let Some(task) = self.capture.take() {
@@ -254,11 +254,30 @@ async fn ask(app: AppHandle, question: String) -> Result<Answer, AskError> {
     }
     let screenshot = app.state::<SharedState>().lock().unwrap().screenshot.clone();
 
-    let task = tauri::async_runtime::spawn(async move {
+    cancellable(&app, async move {
         gemini::ask(&key, &question, screenshot.as_deref().map(Vec::as_slice)).await
-    });
+    })
+    .await
+}
+
+/// Text vorlesen. Gibt die WAV-Datei als rohe Bytes ans Frontend.
+#[tauri::command]
+async fn speak(app: AppHandle, text: String) -> Result<tauri::ipc::Response, AskError> {
+    let key = credentials::load_api_key()
+        .map_err(AskError::Failed)?
+        .ok_or(AskError::KeyMissing)?;
+    let wav = cancellable(&app, async move { gemini::speak(&key, &text).await }).await?;
+    Ok(tauri::ipc::Response::new(wav))
+}
+
+/// Anfrage als eigene Aufgabe starten, die beim Schließen des Overlays abbricht.
+async fn cancellable<T: Send + 'static>(
+    app: &AppHandle,
+    future: impl Future<Output = Result<T, AskError>> + Send + 'static,
+) -> Result<T, AskError> {
+    let task = tauri::async_runtime::spawn(future);
     let abort = task.inner().abort_handle();
-    app.state::<SharedState>().lock().unwrap().cancel_ask = Some(Box::new(move || abort.abort()));
+    app.state::<SharedState>().lock().unwrap().cancel.push(Box::new(move || abort.abort()));
     task.await.unwrap_or(Err(AskError::Cancelled))
 }
 
@@ -330,7 +349,8 @@ pub fn run() {
             startup_error,
             set_overlay_height,
             save_api_key,
-            ask
+            ask,
+            speak
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

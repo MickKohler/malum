@@ -24,6 +24,8 @@ type AskError =
   | { kind: "keyMissing" | "keyInvalid" | "rateLimited" | "overloaded" | "offline" | "cancelled" }
   | { kind: "failed"; message: string };
 
+type Voice = "off" | "loading" | "playing";
+
 type View =
   | { kind: "input" }
   | { kind: "key"; invalid: boolean }
@@ -57,6 +59,10 @@ function App() {
   const hideTimer = useRef<number | undefined>(undefined);
   /** Frage, die nach dem Speichern des Keys gestellt wird. */
   const pendingQuestion = useRef<string | null>(null);
+  const [voice, setVoice] = useState<Voice>("off");
+  const audio = useRef<HTMLAudioElement | null>(null);
+  /** Zählt Fragen hoch, damit eine verspätete Sprachausgabe nicht mehr abgespielt wird. */
+  const session = useRef(0);
 
   useEffect(() => {
     const focusInput = () => {
@@ -70,12 +76,14 @@ function App() {
     const enter = () => {
       // Eine laufende Ausblend-Animation abbrechen.
       window.clearTimeout(hideTimer.current);
+      stopVoice();
       setView({ kind: "input" });
       setPhase("in");
       focusInput();
     };
 
     const exit = () => {
+      stopVoice();
       setPhase("out");
       window.clearTimeout(hideTimer.current);
       hideTimer.current = window.setTimeout(() => {
@@ -124,12 +132,49 @@ function App() {
     if (view.kind === "input" || view.kind === "key") inputRef.current?.focus();
   }, [view.kind]);
 
+  function stopVoice() {
+    session.current++;
+    if (audio.current) {
+      audio.current.pause();
+      URL.revokeObjectURL(audio.current.src);
+      audio.current = null;
+    }
+    setVoice("off");
+  }
+
+  async function speak(text: string) {
+    stopVoice();
+    const id = session.current;
+    setVoice("loading");
+    try {
+      const wav = await invoke<ArrayBuffer>("speak", { text });
+      if (id !== session.current) return;
+      const player = new Audio(URL.createObjectURL(new Blob([wav], { type: "audio/wav" })));
+      player.onended = () => {
+        if (audio.current === player) stopVoice();
+      };
+      audio.current = player;
+      setVoice("playing");
+      await player.play();
+    } catch (e) {
+      if (id !== session.current) return;
+      // Vorlesen ist Zusatz: Fehler leise anzeigen, die Antwort bleibt stehen.
+      console.error("Vorlesen fehlgeschlagen", e);
+      setVoice("off");
+    }
+  }
+
   async function ask(question: string) {
+    stopVoice();
+    const id = session.current;
     setView({ kind: "loading" });
     try {
       const answer = await invoke<Answer>("ask", { question });
+      if (id !== session.current) return;
       setView({ kind: "answer", answer });
+      void speak(answer.needsClarification ?? answer.spoken);
     } catch (e) {
+      if (id !== session.current) return;
       const err = e as AskError;
       if (err.kind === "cancelled") return;
       if (err.kind === "keyMissing" || err.kind === "keyInvalid") {
@@ -245,10 +290,46 @@ function App() {
               {view.message}
             </p>
           )}
-          {view.kind === "answer" && <AnswerView answer={view.answer} />}
+          {view.kind === "answer" && (
+            <>
+              <VoiceButton
+                voice={voice}
+                onToggle={() =>
+                  voice === "off"
+                    ? void speak(view.answer.needsClarification ?? view.answer.spoken)
+                    : stopVoice()
+                }
+              />
+              <AnswerView answer={view.answer} />
+            </>
+          )}
         </section>
       )}
     </main>
+  );
+}
+
+function VoiceButton({ voice, onToggle }: { voice: Voice; onToggle: () => void }) {
+  const label = voice === "off" ? "Vorlesen" : "Vorlesen stoppen";
+  return (
+    <button
+      type="button"
+      className="voice"
+      data-voice={voice}
+      title={label}
+      aria-label={label}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={onToggle}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 9.5v5h3.5L12 19V5L7.5 9.5z" />
+        {voice === "off" ? (
+          <path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" />
+        ) : (
+          <path d="M16 9.5l5 5M21 9.5l-5 5" />
+        )}
+      </svg>
+    </button>
   );
 }
 

@@ -11,6 +11,8 @@ const ENDPOINT: &str = "https://generativelanguage.googleapis.com/v1beta/interac
 
 /// Reihenfolge der Versuche bei Überlastung (503). Kommt später in die Einstellungen.
 const MODELS: [&str; 3] = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.6-flash"];
+const TTS_MODELS: [&str; 3] = ["gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts", "gemini-3.8-flash-tts"];
+const TTS_VOICE: &str = "Kore";
 const RETRY_PAUSE: Duration = Duration::from_secs(2);
 const TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -87,18 +89,8 @@ pub async fn ask(key: &str, question: &str, screenshot: Option<&[u8]>) -> Result
         let data = base64::engine::general_purpose::STANDARD.encode(png);
         input.push(json!({ "type": "image", "data": data, "mime_type": "image/png" }));
     }
-
-    let client = reqwest::Client::builder()
-        .timeout(TIMEOUT)
-        .build()
-        .map_err(|e| AskError::Failed(e.to_string()))?;
-
-    for (attempt, model) in MODELS.iter().enumerate() {
-        if attempt > 0 {
-            // Kurze Pause, ohne den Async-Thread zu blockieren.
-            let _ = tauri::async_runtime::spawn_blocking(|| std::thread::sleep(RETRY_PAUSE)).await;
-        }
-        let body = json!({
+    let body = post(key, &MODELS, |model| {
+        json!({
             "model": model,
             "system_instruction": SYSTEM,
             "input": input,
@@ -108,11 +100,50 @@ pub async fn ask(key: &str, question: &str, screenshot: Option<&[u8]>) -> Result
                 "schema": schema()
             },
             "store": false
-        });
+        })
+    })
+    .await?;
+    parse_answer(&body)
+}
+
+/// Text vorlesen lassen. Liefert eine WAV-Datei (24 kHz, mono) als Bytes.
+pub async fn speak(key: &str, text: &str) -> Result<Vec<u8>, AskError> {
+    let body = post(key, &TTS_MODELS, |model| {
+        json!({
+            "model": model,
+            "input": [{ "type": "user_input", "content": [{ "type": "text", "text": text }] }],
+            "response_format": { "type": "audio" },
+            "generation_config": { "speech_config": [{ "voice": TTS_VOICE }] },
+            "store": false
+        })
+    })
+    .await?;
+    let audio = output_blocks(&body, "audio")?
+        .last()
+        .and_then(|c| c["data"].as_str())
+        .map(str::to_owned)
+        .ok_or_else(|| AskError::Failed("Keine Audiodaten in der Antwort".into()))?;
+    base64::engine::general_purpose::STANDARD
+        .decode(audio)
+        .map_err(|e| AskError::Failed(format!("Audio unlesbar: {e}")))
+}
+
+/// Anfrage senden, bei Überlastung (503) mit dem nächsten Modell der Liste.
+async fn post(key: &str, models: &[&str], body: impl Fn(&str) -> Value) -> Result<String, AskError> {
+    let client = reqwest::Client::builder()
+        .timeout(TIMEOUT)
+        .build()
+        .map_err(|e| AskError::Failed(e.to_string()))?;
+
+    for (attempt, model) in models.iter().enumerate() {
+        if attempt > 0 {
+            // Kurze Pause, ohne den Async-Thread zu blockieren.
+            let _ = tauri::async_runtime::spawn_blocking(|| std::thread::sleep(RETRY_PAUSE)).await;
+        }
         let res = client
             .post(ENDPOINT)
             .header("x-goog-api-key", key)
-            .json(&body)
+            .json(&body(model))
             .send()
             .await
             .map_err(|e| {
@@ -126,7 +157,7 @@ pub async fn ask(key: &str, question: &str, screenshot: Option<&[u8]>) -> Result
         let status = res.status().as_u16();
         let text = res.text().await.map_err(|_| AskError::Offline)?;
         match status {
-            200 => return parse_answer(&text),
+            200 => return Ok(text),
             503 => continue,
             429 => return Err(AskError::RateLimited),
             401 | 403 => return Err(AskError::KeyInvalid),
@@ -142,16 +173,24 @@ pub async fn ask(key: &str, question: &str, screenshot: Option<&[u8]>) -> Result
     Err(AskError::Overloaded)
 }
 
-fn parse_answer(body: &str) -> Result<Answer, AskError> {
+/// Inhaltsblöcke eines Typs ("text", "audio") aus den Ausgabeschritten.
+fn output_blocks(body: &str, kind: &str) -> Result<Vec<Value>, AskError> {
     let interaction: Value =
         serde_json::from_str(body).map_err(|e| AskError::Failed(format!("Antwort unlesbar: {e}")))?;
-    let text: String = interaction["steps"]
+    Ok(interaction["steps"]
         .as_array()
         .into_iter()
         .flatten()
         .filter(|step| step["type"] == "model_output")
         .flat_map(|step| step["content"].as_array().into_iter().flatten())
-        .filter(|c| c["type"] == "text")
+        .filter(|c| c["type"] == kind)
+        .cloned()
+        .collect())
+}
+
+fn parse_answer(body: &str) -> Result<Answer, AskError> {
+    let text: String = output_blocks(body, "text")?
+        .iter()
         .filter_map(|c| c["text"].as_str())
         .collect();
     serde_json::from_str(&text).map_err(|e| AskError::Failed(format!("Antwort hat falsches Format: {e}")))
