@@ -41,6 +41,9 @@ struct OverlayState {
     open: bool,
     shown_at: Option<Instant>,
     startup_error: Option<String>,
+    /// Eine Antwort ist sichtbar: Klick daneben schließt dann nicht mehr,
+    /// damit man ins Übungsblatt schauen kann.
+    sticky: bool,
     /// Läuft gerade: Screenshot des Fensters, das vor dem Overlay vorne war.
     capture: Option<JoinHandle<Option<Vec<u8>>>>,
     /// Fertiger Screenshot für weitere Fragen in derselben Sitzung. Nur im Speicher.
@@ -101,6 +104,7 @@ fn show_overlay(app: &AppHandle, target: Option<isize>) {
         let mut state = state.lock().unwrap();
         state.end_session();
         state.open = true;
+        state.sticky = false;
         state.shown_at = Some(Instant::now());
         state.capture = target.map(|hwnd| {
             tauri::async_runtime::spawn_blocking(move || {
@@ -131,9 +135,12 @@ fn dismiss_overlay(app: &AppHandle) {
     let _ = app.emit("overlay-dismiss", ());
 }
 
+/// Shortcut: Ist das Overlay offen und hat den Fokus, schließt er es. Sonst
+/// beginnt eine neue Frage zum Fenster, das gerade vorne ist.
 fn toggle_overlay(app: &AppHandle) {
     let open = app.state::<SharedState>().lock().unwrap().open;
-    if open {
+    let focused = overlay(app).is_some_and(|w| w.is_focused().unwrap_or(false));
+    if open && focused {
         dismiss_overlay(app);
     } else {
         // Vor dem Einblenden merken, welches Fenster vorne ist.
@@ -229,6 +236,11 @@ fn set_overlay_height(app: AppHandle, height: f64) {
         let height = height.clamp(OVERLAY_MIN_HEIGHT, OVERLAY_MAX_HEIGHT);
         let _ = window.set_size(LogicalSize::new(OVERLAY_WIDTH, height));
     }
+}
+
+#[tauri::command]
+fn set_sticky(state: State<'_, SharedState>, sticky: bool) {
+    state.lock().unwrap().sticky = sticky;
 }
 
 #[tauri::command]
@@ -332,13 +344,12 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let WindowEvent::Focused(false) = event {
                 let app = window.app_handle();
-                let in_grace = app
-                    .state::<SharedState>()
-                    .lock()
-                    .unwrap()
-                    .shown_at
-                    .is_some_and(|t| t.elapsed() < FOCUS_GRACE);
-                if !in_grace {
+                let keep_open = {
+                    let state = app.state::<SharedState>();
+                    let state = state.lock().unwrap();
+                    state.sticky || state.shown_at.is_some_and(|t| t.elapsed() < FOCUS_GRACE)
+                };
+                if !keep_open {
                     dismiss_overlay(app);
                 }
             }
@@ -348,6 +359,7 @@ pub fn run() {
             hide_overlay,
             startup_error,
             set_overlay_height,
+            set_sticky,
             save_api_key,
             ask,
             speak

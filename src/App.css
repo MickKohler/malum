@@ -170,6 +170,11 @@ body,
   color: var(--text-dim);
   font: inherit;
   font-size: 12px;
+  transition: color 140ms ease-out;
+}
+
+.hint:hover {
+  color: var(--text);
 }
 
 /* Während der Anfrage dreht sich die Kugel schneller. */

@@ -127,6 +127,11 @@ function App() {
     return () => observer.disconnect();
   }, []);
 
+  // Solange eine Antwort oder Meldung sichtbar ist, schließt ein Klick daneben nicht.
+  useEffect(() => {
+    void invoke("set_sticky", { sticky: view.kind === "answer" || view.kind === "error" });
+  }, [view.kind]);
+
   // Nach jedem Wechsel zurück zur Eingabe den Fokus ins Feld setzen.
   useEffect(() => {
     if (view.kind === "input" || view.kind === "key") inputRef.current?.focus();
@@ -268,7 +273,16 @@ function App() {
             <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" />
           </svg>
         </button>
-        <kbd className="hint">Esc</kbd>
+        <button
+          type="button"
+          className="hint"
+          title="Schließen (Esc)"
+          tabIndex={-1}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => void invoke("request_dismiss")}
+        >
+          Esc
+        </button>
       </form>
 
       {!error && view.kind !== "input" && (
