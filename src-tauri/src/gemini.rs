@@ -22,7 +22,9 @@ Rules:
 - \"steps\" are short bullet points for the solution. Formulas in them go in $...$ (LaTeX).
 - \"formulas\" are the key formulas as LaTeX (KaTeX-compatible).
 - \"plot\" only if a plot is requested or clearly helps. \"expr\" must be parseable by mathjs and use x as the variable. You do not draw anything yourself.
-- If it is unclear which exercise is meant, or something is unreadable, set \"needsClarification\" to a short follow-up question, otherwise null.";
+- If it is unclear which exercise is meant, or something is unreadable, set \"needsClarification\" to a short follow-up question, otherwise null.
+- The output is JSON: escape every LaTeX backslash, e.g. write \"\\\\frac{1}{2}\" and \"\\\\forall\", \
+never a single backslash.";
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -208,7 +210,66 @@ fn parse_answer(body: &str) -> Result<(Answer, String), AskError> {
         .iter()
         .filter_map(|c| c["text"].as_str())
         .collect();
-    let answer = serde_json::from_str(&text)
+    let mut answer: Answer = serde_json::from_str(&text)
         .map_err(|e| AskError::Failed(format!("Response has the wrong format: {e}")))?;
+    answer.formulas = answer.formulas.iter().map(|f| repair_latex(f)).collect();
+    answer.steps = answer.steps.iter().map(|s| repair_inline_latex(s)).collect();
     Ok((answer, text))
+}
+
+/// Das Modell schreibt LaTeX manchmal mit einfachem Backslash ins JSON. Dann wird
+/// z. B. `\frac` als Seitenvorschub plus "rac" gelesen und `\text` als Tab plus "ext".
+/// Diese Steuerzeichen kommen in Formeln nie gewollt vor, also zurückverwandeln.
+fn repair_latex(tex: &str) -> String {
+    let mut out = String::with_capacity(tex.len());
+    for c in tex.chars() {
+        match c {
+            '\u{8}' => out.push_str("\\b"),
+            '\u{c}' => out.push_str("\\f"),
+            '\t' => out.push_str("\\t"),
+            '\r' => out.push_str("\\r"),
+            '\n' => out.push_str("\\n"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+/// Wie `repair_latex`, aber nur innerhalb von `$...$`, der Text drumherum bleibt.
+fn repair_inline_latex(text: &str) -> String {
+    text.split('$')
+        .enumerate()
+        .map(|(i, part)| if i % 2 == 1 { repair_latex(part) } else { part.to_owned() })
+        .collect::<Vec<_>>()
+        .join("$")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn repairs_json_escaped_latex() {
+        // So kommt "\forall \varepsilon > 0: \frac{1}{n} \text{ für } n" an, wenn das
+        // Modell die Backslashes im JSON nicht verdoppelt.
+        let broken = "\u{c}orall \\varepsilon > 0: \u{c}rac{1}{n} \text{ für } \nabla";
+        assert_eq!(
+            repair_latex(broken),
+            "\\forall \\varepsilon > 0: \\frac{1}{n} \\text{ für } \\nabla"
+        );
+    }
+
+    #[test]
+    fn repairs_only_inside_dollars() {
+        let step = "Line\tone: $\u{c}rac{a}{b}$ and $\text{x}$";
+        assert_eq!(
+            repair_inline_latex(step),
+            "Line\tone: $\\frac{a}{b}$ and $\\text{x}$"
+        );
+    }
+
+    #[test]
+    fn leaves_correct_latex_alone() {
+        assert_eq!(repair_latex("\\frac{1}{2}"), "\\frac{1}{2}");
+    }
 }

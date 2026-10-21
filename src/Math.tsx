@@ -3,8 +3,13 @@ import katex from "katex";
 import "katex/dist/katex.min.css";
 
 function render(tex: string, displayMode: boolean): string {
-  // Kaputtes LaTeX nicht abstürzen lassen, sondern rot als Quelltext zeigen.
-  return katex.renderToString(tex, { displayMode, throwOnError: false, strict: "ignore" });
+  // Kaputtes LaTeX nicht abstürzen lassen, sondern gedämpft als Quelltext zeigen.
+  return katex.renderToString(tex, {
+    displayMode,
+    throwOnError: false,
+    errorColor: "#9a9aa6",
+    strict: "ignore",
+  });
 }
 
 /** Eine Formel als eigene Zeile. */
