@@ -100,16 +100,14 @@ Plugin-System.
 
 ## Stand
 
-Stand 2026-10-21: Abend 0 bis 2 erledigt. Fenster-Spike fertig (Tag `spike-fenster`)
-und erweitert: Overlay (440 px breit) per Strg+Umschalt+Leertaste ein- und
-ausblenden, oben rechts angedockt auf dem Monitor mit dem Mauszeiger, Ein- und
-Ausblend-Animation, Esc und Fokusverlust schließen. Tray-Icon mit Menü (Öffnen,
-Mit Windows starten, Beenden), nur eine laufende Instanz. Mikrofon-Symbol in der
-Leiste, bisher nur Optik. Installer als NSIS. Der Shortcut reagiert bisher nur auf
-"gedrückt"; Push-to-talk ("losgelassen") fehlt noch.
-API-Spike (Abend 3) ohne Audio erledigt (`spikes/api/spike.mjs`): Screenshot plus
-Textfrage liefert brauchbares JSON, deutsche TTS klingt gut. `.env` mit Gemini-Key liegt lokal.
-Offen: Test mit Sprachaufnahme (Audio plus Bild). Siehe WOCHE-1-CHECKLISTE.md.
+Stand 2026-10-21 (abends): Kernablauf v1 steht, Sprache noch ungetestet.
+Shortcut kurz tippen = Frage tippen, halten = sprechen (Push-to-talk). Beim Drücken wird
+das Fenster vorne aufgenommen (nur im Speicher). Antwort von Gemini mit Stichpunkten,
+Formeln (KaTeX), Plot (mathjs + eigenes SVG) und Vorlesen (Gemini TTS). Key liegt im
+Windows-Anmeldeinformationsspeicher. Antwort bleibt beim Klick daneben offen.
+Offen: Sprachaufnahme im echten Test, Screenshot-Vorschau vor dem Senden, Gesprächsverlauf
+(Rückfragen mit Kontext), Einstellungen (Modell, Stimme, Shortcut, Vorlesen an/aus),
+Antwortzeit verkürzen (Streaming).
 
 ## Entscheidungslog
 
@@ -158,3 +156,11 @@ Offen: Test mit Sprachaufnahme (Audio plus Bild). Siehe WOCHE-1-CHECKLISTE.md.
   den Einstellungen, sichtbare Meldung "Modell überlastet".
 - 2026-10-21, Antwortzeit ist das nächste Risiko für "smooth". Später prüfen:
   Streaming, weniger Denkzeit (`thinking_level`), Text zeigen während TTS läuft.
+- 2026-10-21, Screenshot per Win32 `PrintWindow` (Crate `windows`, ohne Screenshot-
+  Bibliothek): `xcap` hatte keine baubare Doku, `keyring` wurde gerade umgebaut. Key im
+  Anmeldeinformationsspeicher ebenfalls über `windows`. HTTP mit `reqwest` (native-tls).
+- 2026-10-21, Plot ohne Plot-Bibliothek: mathjs tastet ab, eigenes SVG zeichnet. Spart
+  eine Abhängigkeit, Aussehen voll in eigener Hand.
+- 2026-10-21, Sprachaufnahme in der WebView (MediaRecorder, WebM/Opus), nicht in Rust.
+  Gemini nimmt `audio/webm` an, Tauri erlaubt das Mikrofon per `on_permission_request`.
+  Keine neue Abhängigkeit.
