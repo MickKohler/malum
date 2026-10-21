@@ -1,9 +1,18 @@
-use std::sync::Mutex;
+mod capture;
+mod credentials;
+mod gemini;
+
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use tauri::async_runtime::JoinHandle;
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewWindow, WindowEvent};
+use tauri::{
+    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, State, WebviewWindow, WindowEvent,
+};
+
+use gemini::{Answer, AskError};
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_global_shortcut::{
     Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState,
@@ -11,6 +20,9 @@ use tauri_plugin_global_shortcut::{
 
 /// Logische Größe des Overlays (muss zu tauri.conf.json passen).
 const OVERLAY_WIDTH: f64 = 440.0;
+const OVERLAY_MIN_HEIGHT: f64 = 72.0;
+/// Höher wird das Fenster nie, längere Antworten scrollen im Frontend.
+const OVERLAY_MAX_HEIGHT: f64 = 640.0;
 
 /// Logischer Abstand des Fensters zum rechten und oberen Rand des Arbeitsbereichs.
 /// Sichtbar sind 16 bzw. 24 px, weil `.stage` in App.css noch 10 bzw. 8 px
@@ -29,6 +41,25 @@ struct OverlayState {
     open: bool,
     shown_at: Option<Instant>,
     startup_error: Option<String>,
+    /// Läuft gerade: Screenshot des Fensters, das vor dem Overlay vorne war.
+    capture: Option<JoinHandle<Option<Vec<u8>>>>,
+    /// Fertiger Screenshot für weitere Fragen in derselben Sitzung. Nur im Speicher.
+    screenshot: Option<Arc<Vec<u8>>>,
+    /// Bricht die laufende Gemini-Anfrage ab.
+    cancel_ask: Option<Box<dyn Fn() + Send>>,
+}
+
+impl OverlayState {
+    /// Sitzung beenden: Anfrage abbrechen, Screenshot verwerfen.
+    fn end_session(&mut self) {
+        if let Some(cancel) = self.cancel_ask.take() {
+            cancel();
+        }
+        if let Some(task) = self.capture.take() {
+            task.abort();
+        }
+        self.screenshot = None;
+    }
 }
 
 type SharedState = Mutex<OverlayState>;
@@ -61,14 +92,25 @@ fn dock_on_cursor_monitor(app: &AppHandle, window: &WebviewWindow) {
     let _ = window.set_position(PhysicalPosition::new(x, y));
 }
 
-fn show_overlay(app: &AppHandle) {
+/// `target` ist das Fenster, das aufgenommen werden soll (nur beim Shortcut,
+/// beim Tray-Klick ist das vordere Fenster die Taskleiste).
+fn show_overlay(app: &AppHandle, target: Option<isize>) {
     let Some(window) = overlay(app) else { return };
     {
         let state = app.state::<SharedState>();
         let mut state = state.lock().unwrap();
+        state.end_session();
         state.open = true;
         state.shown_at = Some(Instant::now());
+        state.capture = target.map(|hwnd| {
+            tauri::async_runtime::spawn_blocking(move || {
+                capture::capture_png(hwnd)
+                    .inspect_err(|err| eprintln!("Screenshot fehlgeschlagen: {err}"))
+                    .ok()
+            })
+        });
     }
+    let _ = window.set_size(LogicalSize::new(OVERLAY_WIDTH, OVERLAY_MIN_HEIGHT));
     dock_on_cursor_monitor(app, &window);
     let _ = window.show();
     let _ = window.set_focus();
@@ -84,6 +126,7 @@ fn dismiss_overlay(app: &AppHandle) {
         return;
     }
     state.open = false;
+    state.end_session();
     drop(state);
     let _ = app.emit("overlay-dismiss", ());
 }
@@ -93,7 +136,8 @@ fn toggle_overlay(app: &AppHandle) {
     if open {
         dismiss_overlay(app);
     } else {
-        show_overlay(app);
+        // Vor dem Einblenden merken, welches Fenster vorne ist.
+        show_overlay(app, capture::foreground_window());
     }
 }
 
@@ -120,7 +164,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(move |app, event| match event.id.as_ref() {
-            "open" => show_overlay(app),
+            "open" => show_overlay(app, None),
             "autostart" => set_autostart(app, &autostart_item),
             "quit" => app.exit(0),
             _ => {}
@@ -134,7 +178,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                 ..
             } = event
             {
-                show_overlay(tray.app_handle());
+                show_overlay(tray.app_handle(), None);
             }
         });
     if let Some(icon) = app.default_window_icon() {
@@ -178,6 +222,46 @@ fn startup_error(state: State<'_, SharedState>) -> Option<String> {
     state.lock().unwrap().startup_error.clone()
 }
 
+/// Das Frontend meldet seine Inhaltshöhe, das Fenster wächst nach unten mit.
+#[tauri::command]
+fn set_overlay_height(app: AppHandle, height: f64) {
+    if let Some(window) = overlay(&app) {
+        let height = height.clamp(OVERLAY_MIN_HEIGHT, OVERLAY_MAX_HEIGHT);
+        let _ = window.set_size(LogicalSize::new(OVERLAY_WIDTH, height));
+    }
+}
+
+#[tauri::command]
+fn save_api_key(key: String) -> Result<(), String> {
+    let key = key.trim();
+    if key.is_empty() {
+        return Err("Bitte einen Key einfügen".into());
+    }
+    credentials::save_api_key(key)
+}
+
+/// Frage plus Screenshot an Gemini. Esc oder Schließen bricht die Anfrage ab.
+#[tauri::command]
+async fn ask(app: AppHandle, question: String) -> Result<Answer, AskError> {
+    let key = credentials::load_api_key()
+        .map_err(AskError::Failed)?
+        .ok_or(AskError::KeyMissing)?;
+
+    let pending = app.state::<SharedState>().lock().unwrap().capture.take();
+    if let Some(task) = pending {
+        let png = task.await.ok().flatten();
+        app.state::<SharedState>().lock().unwrap().screenshot = png.map(Arc::new);
+    }
+    let screenshot = app.state::<SharedState>().lock().unwrap().screenshot.clone();
+
+    let task = tauri::async_runtime::spawn(async move {
+        gemini::ask(&key, &question, screenshot.as_deref().map(Vec::as_slice)).await
+    });
+    let abort = task.inner().abort_handle();
+    app.state::<SharedState>().lock().unwrap().cancel_ask = Some(Box::new(move || abort.abort()));
+    task.await.unwrap_or(Err(AskError::Cancelled))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default();
@@ -186,7 +270,7 @@ pub fn run() {
     #[cfg(desktop)]
     {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            show_overlay(app);
+            show_overlay(app, None);
         }));
     }
 
@@ -221,7 +305,7 @@ pub fn run() {
                     );
                     eprintln!("{message}");
                     app.state::<SharedState>().lock().unwrap().startup_error = Some(message);
-                    show_overlay(app.handle());
+                    show_overlay(app.handle(), None);
                 }
             }
             Ok(())
@@ -240,7 +324,14 @@ pub fn run() {
                 }
             }
         })
-        .invoke_handler(tauri::generate_handler![request_dismiss, hide_overlay, startup_error])
+        .invoke_handler(tauri::generate_handler![
+            request_dismiss,
+            hide_overlay,
+            startup_error,
+            set_overlay_height,
+            save_api_key,
+            ask
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

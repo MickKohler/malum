@@ -29,14 +29,15 @@ body,
 }
 
 .stage {
-  height: 100%;
+  /* Höhe ergibt sich aus dem Inhalt, das Fenster wächst mit. */
   box-sizing: border-box;
   /* Platz für den weichen Schatten innerhalb des transparenten Fensters. */
   padding: 8px 10px;
 }
 
 .bar {
-  height: 100%;
+  height: 56px;
+  margin: 0;
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -171,13 +172,144 @@ body,
   font-size: 12px;
 }
 
+/* Während der Anfrage dreht sich die Kugel schneller. */
+.bar[data-busy] .orb {
+  animation:
+    breathe 1.2s ease-in-out infinite,
+    spin 1.6s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    rotate: 360deg;
+  }
+}
+
+/* Antwortbereich unter der Leiste */
+.panel {
+  margin-top: 8px;
+  max-height: 544px;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 16px 18px;
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, var(--bar-highlight), transparent 40%),
+    var(--bar-bg);
+  border: 1px solid var(--bar-border);
+  box-shadow: 0 6px 16px -6px rgba(0, 0, 0, 0.55);
+  color: var(--text);
+  font-size: 14.5px;
+  line-height: 1.5;
+  user-select: text;
+  animation: panel-in 220ms var(--ease-in);
+  transition: opacity 120ms var(--ease-out);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+.panel[data-phase="out"] {
+  opacity: 0;
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+.status {
+  margin: 0;
+  color: var(--text-dim);
+}
+
+.status-error {
+  color: var(--error);
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--text-dim) 0%,
+    var(--text) 50%,
+    var(--text-dim) 100%
+  );
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: shimmer 1.6s linear infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+.answer > * + * {
+  margin-top: 12px;
+}
+
+.spoken,
+.clarify {
+  margin: 0;
+}
+
+.clarify {
+  color: var(--accent-b);
+}
+
+.steps {
+  margin-bottom: 0;
+  padding-left: 20px;
+}
+
+.steps li + li {
+  margin-top: 4px;
+}
+
+.steps li::marker {
+  color: var(--accent-a);
+}
+
+.formulas {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.formulas code {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.plot-note {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .bar,
   .bar[data-phase="in"] {
     transform: none;
     transition: opacity 100ms linear;
   }
-  .orb {
+  .orb,
+  .bar[data-busy] .orb,
+  .shimmer {
+    animation: none;
+  }
+  .panel {
     animation: none;
   }
 }
