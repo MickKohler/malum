@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Formula, MathText } from "./Math";
+import { Plot } from "./Plot";
 import "./App.css";
 
 /** Muss zur Dauer der Ausblend-Transition in App.css passen. */
@@ -274,11 +275,7 @@ function AnswerView({ answer }: { answer: Answer }) {
           ))}
         </div>
       )}
-      {answer.plot && (
-        <p className="plot-note">
-          Plot (folgt): {answer.plot.label} für x von {answer.plot.xMin} bis {answer.plot.xMax}
-        </p>
-      )}
+      {answer.plot && <Plot {...answer.plot} />}
     </div>
   );
 }
