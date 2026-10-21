@@ -100,14 +100,13 @@ Plugin-System.
 
 ## Stand
 
-Stand 2026-10-21 (abends): Kernablauf v1 steht, Sprache noch ungetestet.
-Shortcut kurz tippen = Frage tippen, halten = sprechen (Push-to-talk). Beim Drücken wird
-das Fenster vorne aufgenommen (nur im Speicher). Antwort von Gemini mit Stichpunkten,
-Formeln (KaTeX), Plot (mathjs + eigenes SVG) und Vorlesen (Gemini TTS). Key liegt im
-Windows-Anmeldeinformationsspeicher. Antwort bleibt beim Klick daneben offen.
-Offen: Sprachaufnahme im echten Test, Screenshot-Vorschau vor dem Senden, Gesprächsverlauf
-(Rückfragen mit Kontext), Einstellungen (Modell, Stimme, Shortcut, Vorlesen an/aus),
-Antwortzeit verkürzen (Streaming).
+Stand 2026-10-21 (spät): Kernablauf v1 steht, Sprache noch ungetestet. Oberfläche,
+Meldungen, README und Modell-Prompt sind auf Englisch (Fragen weiter auf Deutsch möglich).
+Shortcut kurz tippen = Frage tippen, halten = sprechen. Beim Drücken wird das Fenster vorne
+aufgenommen (nur im Speicher) und als Vorschau gezeigt, abwählbar. Antwort mit Stichpunkten,
+Formeln (KaTeX), Plot und Vorlesen. Rückfragen mit Gesprächsverlauf pro Sitzung.
+Offen: Sprachaufnahme im echten Test, Einstellungen (Key, Modell, Stimme, Shortcut,
+Vorlesen und Vorschau an/aus), Antwortzeit verkürzen, Installer neu bauen.
 
 ## Entscheidungslog
 
@@ -164,3 +163,8 @@ Antwortzeit verkürzen (Streaming).
 - 2026-10-21, Sprachaufnahme in der WebView (MediaRecorder, WebM/Opus), nicht in Rust.
   Gemini nimmt `audio/webm` an, Tauri erlaubt das Mikrofon per `on_permission_request`.
   Keine neue Abhängigkeit.
+- 2026-10-21, Nach außen alles auf Englisch (UI, README, Prompt). Interne Doku
+  (PROJECT.md, Code-Kommentare) bleibt vorerst Deutsch.
+- 2026-10-21, Gesprächsverlauf zustandslos: Der ganze Verlauf geht bei jeder Frage als
+  `user_input`/`model_output`-Schritte mit, `store: false` bleibt. Grund: Mit `store: true`
+  würde Google die Gespräche speichern (Gratis-Tarif: 1 Tag).
