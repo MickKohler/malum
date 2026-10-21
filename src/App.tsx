@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { Formula, MathText } from "./Math";
 import "./App.css";
 
 /** Muss zur Dauer der Ausblend-Transition in App.css passen. */
@@ -260,15 +261,16 @@ function AnswerView({ answer }: { answer: Answer }) {
       {answer.steps.length > 0 && (
         <ol className="steps">
           {answer.steps.map((step, i) => (
-            <li key={i}>{step}</li>
+            <li key={i}>
+              <MathText text={step} />
+            </li>
           ))}
         </ol>
       )}
-      {/* Vorerst roh. Schöne Darstellung mit KaTeX kommt als eigener Schritt. */}
       {answer.formulas.length > 0 && (
         <div className="formulas">
           {answer.formulas.map((formula, i) => (
-            <code key={i}>{formula}</code>
+            <Formula key={i} tex={formula} />
           ))}
         </div>
       )}
