@@ -1,1 +1,1 @@
-Lies vor jeder Aufgabe PROJECT.md im Projektordner und halte dich an die Regeln dort.
+Before every task, read docs/DESIGN.md and follow the rules in it.

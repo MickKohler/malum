@@ -1,5 +1,5 @@
 // API spike: checks whether the Gemini API (free tier) accepts a screenshot plus a
-// question, returns the answer format from PROJECT.md, and can do German TTS.
+// question, returns the answer format from docs/DESIGN.md, and can do German TTS.
 // Not app code. No dependencies, only Node's built-in fetch.
 //
 // Run from the project folder:
