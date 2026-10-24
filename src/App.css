@@ -8,7 +8,7 @@
   --accent-b: #4fd1ff;
   --error: #ff8a8a;
 
-  /* Federnde Kurve fürs Einblenden, ruhige fürs Ausblenden. */
+  /* Springy curve for entering, calm one for exiting. */
   --ease-in: cubic-bezier(0.2, 0.9, 0.25, 1.15);
   --ease-out: cubic-bezier(0.4, 0, 1, 1);
 
@@ -29,9 +29,9 @@ body,
 }
 
 .stage {
-  /* Höhe ergibt sich aus dem Inhalt, das Fenster wächst mit. */
+  /* Height follows the content, the window grows with it. */
   box-sizing: border-box;
-  /* Platz für den weichen Schatten innerhalb des transparenten Fensters. */
+  /* Room for the soft shadow inside the transparent window. */
   padding: 8px 10px;
 }
 
@@ -52,7 +52,7 @@ body,
     0 6px 16px -6px rgba(0, 0, 0, 0.55),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
 
-  /* Ausgeblendeter Zustand */
+  /* Hidden state */
   opacity: 0;
   transform: translateX(18px) scale(0.98);
   transition:
@@ -69,7 +69,7 @@ body,
     transform 260ms var(--ease-in);
 }
 
-/* Kleine leuchtende Kugel als "bereit"-Indikator. */
+/* Small glowing orb as the "ready" indicator. */
 .orb {
   flex: none;
   width: 14px;
@@ -177,7 +177,7 @@ body,
   color: var(--text);
 }
 
-/* Aufnahme läuft: Kugel und Mikrofon leuchten rot. */
+/* Recording: orb and microphone glow red. */
 .bar[data-listening] .orb {
   background: radial-gradient(circle at 35% 30%, #fff 0 12%, transparent 13%), #ff5f6d;
   box-shadow: 0 0 14px 0 #ff5f6d;
@@ -204,7 +204,7 @@ body,
   animation: breathe-opacity 1s ease-in-out infinite;
 }
 
-/* Während der Anfrage dreht sich die Kugel schneller. */
+/* While a request is running, the orb spins faster. */
 .bar[data-busy] .orb {
   animation:
     breathe 1.2s ease-in-out infinite,
@@ -217,7 +217,7 @@ body,
   }
 }
 
-/* Antwortbereich unter der Leiste */
+/* Answer panel below the bar */
 .panel {
   margin-top: 8px;
   max-height: 544px;
@@ -240,7 +240,7 @@ body,
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
 }
 
-/* Erst nach der Tipp-Grenze (300 ms) zeigen, sonst blitzt es bei kurzem Tippen auf. */
+/* Show only after the tap threshold (300 ms), otherwise it flashes on a short tap. */
 .panel[data-listening-only] {
   animation: panel-in 220ms 280ms var(--ease-in) both;
 }
@@ -256,7 +256,7 @@ body,
   }
 }
 
-/* Lautsprecher oben rechts im Antwortbereich */
+/* Speaker button at the top right of the answer */
 .voice {
   float: right;
   display: grid;
@@ -303,7 +303,7 @@ body,
   stroke-linejoin: round;
 }
 
-/* Vorschau des Fensters, das gesendet wird */
+/* Preview of the window that will be sent */
 .shot {
   display: flex;
   align-items: center;
@@ -362,7 +362,7 @@ body,
   stroke-linecap: round;
 }
 
-/* Verlauf: Fragen und Antworten untereinander */
+/* Conversation: questions and answers stacked */
 .turn + .turn {
   margin-top: 16px;
   padding-top: 14px;

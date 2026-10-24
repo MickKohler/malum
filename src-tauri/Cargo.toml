@@ -22,12 +22,12 @@ tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-# Anfragen an Gemini. native-tls nutzt die Windows-eigene TLS (kein Extra-Build nötig).
+# Requests to Gemini. native-tls uses Windows' own TLS (no extra build step).
 reqwest = { version = "0.13", default-features = false, features = ["native-tls", "json", "http2"] }
 base64 = "0.22"
-# Screenshot verpacken.
+# Encode the screenshot.
 png = "0.18"
-# Fenster-Screenshot und Key im Windows-Anmeldeinformationsspeicher.
+# Window screenshot and key in the Windows Credential Manager.
 windows = { version = "0.62", features = [
   "Win32_Foundation",
   "Win32_Graphics_Gdi",

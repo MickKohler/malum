@@ -1,9 +1,9 @@
-// API-Spike: Prüft, ob die Gemini-API (Gratis-Tarif) einen Screenshot plus Frage
-// annimmt, das Antwortformat aus PROJECT.md liefert und deutsche TTS kann.
-// Kein App-Code. Keine Abhängigkeiten, nur Node-eigenes fetch.
+// API spike: checks whether the Gemini API (free tier) accepts a screenshot plus a
+// question, returns the answer format from PROJECT.md, and can do German TTS.
+// Not app code. No dependencies, only Node's built-in fetch.
 //
-// Aufruf aus dem Projektordner:
-//   node --env-file=.env spikes/api/spike.mjs [antwortmodell] [tts-modell]
+// Run from the project folder:
+//   node --env-file=.env spikes/api/spike.mjs [answer-model] [tts-model]
 
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -20,20 +20,20 @@ const TTS_VOICE = "Kore";
 
 const key = process.env.GEMINI_API_KEY;
 if (!key) {
-  console.error("GEMINI_API_KEY fehlt. Mit `node --env-file=.env ...` starten.");
+  console.error("GEMINI_API_KEY is missing. Run with `node --env-file=.env ...`.");
   process.exit(1);
 }
 
-const SYSTEM = `Du bist ein Tutor für Mathe-Übungsblätter. Du bekommst einen Screenshot
-und eine Frage. Antworte in der Sprache der Frage (Deutsch oder Englisch).
-Regeln:
-- "spoken" ist der Text, der vorgelesen wird. Formeln darin in Worten, nie LaTeX.
-- "steps" sind kurze Stichpunkte zum Lösungsweg. Formeln darin in $...$ (LaTeX).
-- "formulas" sind die wichtigsten Formeln als LaTeX (KaTeX-kompatibel).
-- "plot" nur, wenn ein Plot gewünscht ist oder klar hilft. "expr" muss mathjs-parsebar
-  sein und x als Variable nutzen. Du zeichnest nicht selbst.
-- Ist unklar, welche Aufgabe gemeint ist, oder ist etwas nicht lesbar, setze
-  "needsClarification" auf eine kurze Rückfrage, sonst null.`;
+const SYSTEM = `You are a tutor for math exercise sheets. You get a screenshot and a
+question. Answer in the language of the question (e.g. German or English).
+Rules:
+- "spoken" is the text that will be read aloud. Write formulas in words, never LaTeX.
+- "steps" are short bullet points for the solution. Formulas in them go in $...$ (LaTeX).
+- "formulas" are the key formulas as LaTeX (KaTeX-compatible).
+- "plot" only if a plot is requested or clearly helps. "expr" must be parseable by
+  mathjs and use x as the variable. You do not draw anything yourself.
+- If it is unclear which exercise is meant, or something is unreadable, set
+  "needsClarification" to a short follow-up question, otherwise null.`;
 
 const SCHEMA = {
   type: "object",
@@ -56,7 +56,7 @@ const SCHEMA = {
   required: ["spoken", "steps", "formulas", "plot", "needsClarification"],
 };
 
-// Bei 503 (Modell überlastet) bis zu drei Versuche mit kurzer Pause.
+// On 503 (model overloaded), up to three attempts with a short pause.
 async function call(body) {
   for (let attempt = 1; ; attempt++) {
     const started = performance.now();
@@ -68,12 +68,12 @@ async function call(body) {
     const seconds = ((performance.now() - started) / 1000).toFixed(1);
     const text = await res.text();
     if (res.status === 503 && attempt < 3) {
-      console.log(`503 überlastet (Versuch ${attempt}), neuer Versuch in ${attempt * 3} s`);
+      console.log(`503 overloaded (attempt ${attempt}), retrying in ${attempt * 3} s`);
       await new Promise((r) => setTimeout(r, attempt * 3000));
       continue;
     }
     if (!res.ok) {
-      throw new Error(`HTTP ${res.status} nach ${seconds} s: ${text.slice(0, 800)}`);
+      throw new Error(`HTTP ${res.status} after ${seconds} s: ${text.slice(0, 800)}`);
     }
     return { json: JSON.parse(text), seconds, attempt };
   }
@@ -88,12 +88,12 @@ function outputBlocks(interaction, type) {
 
 function checkShape(answer) {
   const problems = [];
-  if (typeof answer.spoken !== "string") problems.push("spoken fehlt");
-  if (/\\[a-z]+|\$/.test(answer.spoken ?? "")) problems.push("spoken enthält LaTeX");
-  if (!Array.isArray(answer.steps)) problems.push("steps fehlt");
-  if (!Array.isArray(answer.formulas)) problems.push("formulas fehlt");
-  if (!("plot" in answer)) problems.push("plot fehlt");
-  if (!("needsClarification" in answer)) problems.push("needsClarification fehlt");
+  if (typeof answer.spoken !== "string") problems.push("spoken missing");
+  if (/\\[a-z]+|\$/.test(answer.spoken ?? "")) problems.push("spoken contains LaTeX");
+  if (!Array.isArray(answer.steps)) problems.push("steps missing");
+  if (!Array.isArray(answer.formulas)) problems.push("formulas missing");
+  if (!("plot" in answer)) problems.push("plot missing");
+  if (!("needsClarification" in answer)) problems.push("needsClarification missing");
   return problems;
 }
 
@@ -124,7 +124,7 @@ async function speak(name, text) {
     store: false,
   });
   const audio = outputBlocks(json, "audio").at(-1);
-  if (!audio?.data) throw new Error("Keine Audiodaten in der Antwort");
+  if (!audio?.data) throw new Error("No audio in the response");
   const file = path.join(outputDir, `${name}.wav`);
   await writeFile(file, Buffer.from(audio.data, "base64"));
   return { file, seconds, mime: audio.mime_type };
@@ -135,15 +135,16 @@ async function run(label, fn) {
   try {
     return await fn();
   } catch (err) {
-    console.log(`FEHLER: ${err.message}`);
+    console.log(`ERROR: ${err.message}`);
     return null;
   }
 }
 
 await mkdir(outputDir, { recursive: true });
-const image = (await readFile(path.join(inputDir, "blatt.png"))).toString("base64");
-console.log(`Antwortmodell: ${MODEL}, TTS-Modell: ${TTS_MODEL} (Stimme ${TTS_VOICE})`);
+const image = (await readFile(path.join(inputDir, "sheet.png"))).toString("base64");
+console.log(`Answer model: ${MODEL}, TTS model: ${TTS_MODEL} (voice ${TTS_VOICE})`);
 
+// One German and one English question, to check language detection.
 const results = {};
 for (const [name, question] of [
   ["test1_de_1b", "Erkläre mir Aufgabe 1b"],
@@ -152,7 +153,7 @@ for (const [name, question] of [
   results[name] = await run(`${name}: "${question}"`, async () => {
     const r = await ask(name, question, image);
     const problems = checkShape(r.answer);
-    console.log(`ERFOLG in ${r.seconds} s`);
+    console.log(`OK in ${r.seconds} s`);
     console.log(`Format: ${problems.length ? problems.join(", ") : "ok"}`);
     if (r.usage) console.log(`Tokens: ${JSON.stringify(r.usage)}`);
     console.log(JSON.stringify(r.answer, null, 2));
@@ -161,9 +162,9 @@ for (const [name, question] of [
 }
 
 const spoken = results.test1_de_1b?.answer?.spoken;
-await run("test3_tts: gesprochener Text aus Test 1", async () => {
-  if (!spoken) throw new Error("Übersprungen, Test 1 hat keinen Text geliefert");
+await run("test3_tts: spoken text from test 1", async () => {
+  if (!spoken) throw new Error("Skipped, test 1 returned no text");
   const r = await speak("test3_tts", spoken);
-  console.log(`ERFOLG in ${r.seconds} s, ${r.mime ?? "unbekanntes Format"}`);
-  console.log(`Gespeichert: ${r.file}`);
+  console.log(`OK in ${r.seconds} s, ${r.mime ?? "unknown format"}`);
+  console.log(`Saved: ${r.file}`);
 });

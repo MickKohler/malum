@@ -1,5 +1,5 @@
-//! Screenshot eines einzelnen Fensters. Das Bild bleibt im Speicher und wird nie
-//! auf die Festplatte geschrieben.
+//! Screenshot of a single window. The image stays in memory and is never
+//! written to disk.
 
 use std::io::Cursor;
 
@@ -14,11 +14,11 @@ use windows::Win32::UI::WindowsAndMessaging::{
     GetForegroundWindow, GetWindowRect, GetWindowThreadProcessId, IsIconic, PW_RENDERFULLCONTENT,
 };
 
-/// Breitere Fenster werden verkleinert. Spart Zeit und Kontingent, Text bleibt lesbar.
+/// Wider windows are scaled down. Saves time and quota, text stays readable.
 const MAX_WIDTH: i32 = 1600;
 
-/// Das Fenster im Vordergrund als Zahl (HWND selbst darf nicht zwischen Threads
-/// wandern). `None`, wenn keins da ist oder es zu malum selbst gehört.
+/// The foreground window as a number (an HWND itself must not move between
+/// threads). `None` if there is none or it belongs to malum itself.
 pub fn foreground_window() -> Option<isize> {
     unsafe {
         let hwnd = GetForegroundWindow();
@@ -31,8 +31,8 @@ pub fn foreground_window() -> Option<isize> {
     }
 }
 
-/// Fenster als PNG aufnehmen. Funktioniert auch, wenn das Overlay darüber liegt,
-/// weil das Fenster sich selbst in ein Bitmap zeichnet.
+/// Capture a window as PNG. Works even when the overlay is on top of it,
+/// because the window draws itself into a bitmap.
 pub fn capture_png(window: isize) -> Result<Vec<u8>, String> {
     let hwnd = HWND(window as *mut _);
     unsafe {
@@ -55,7 +55,7 @@ pub fn capture_png(window: isize) -> Result<Vec<u8>, String> {
         let full_dc = CreateCompatibleDC(Some(screen));
         let full_bmp = CreateCompatibleBitmap(screen, width, height);
         let old_full = SelectObject(full_dc, full_bmp.into());
-        // PW_RENDERFULLCONTENT braucht es für Browser und andere GPU-Fenster (z. B. PDF in Edge).
+        // PW_RENDERFULLCONTENT is needed for browsers and other GPU windows (e.g. a PDF in Edge).
         let printed = PrintWindow(hwnd, full_dc, PRINT_WINDOW_FLAGS(PW_RENDERFULLCONTENT)).as_bool();
 
         let out_dc = CreateCompatibleDC(Some(screen));
@@ -65,14 +65,14 @@ pub fn capture_png(window: isize) -> Result<Vec<u8>, String> {
         let _ = SetBrushOrgEx(out_dc, 0, 0, None);
         let stretched =
             StretchBlt(out_dc, 0, 0, out_w, out_h, Some(full_dc), 0, 0, width, height, SRCCOPY).as_bool();
-        // GetDIBits verlangt, dass das Bitmap nicht mehr in einem DC steckt.
+        // GetDIBits requires the bitmap to no longer be selected into a DC.
         SelectObject(out_dc, old_out);
 
         let mut info = BITMAPINFO {
             bmiHeader: BITMAPINFOHEADER {
                 biSize: size_of::<BITMAPINFOHEADER>() as u32,
                 biWidth: out_w,
-                biHeight: -out_h, // negativ = Zeilen von oben nach unten
+                biHeight: -out_h, // negative = rows from top to bottom
                 biPlanes: 1,
                 biBitCount: 32,
                 biCompression: BI_RGB.0,

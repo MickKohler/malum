@@ -1,5 +1,5 @@
-//! Anfrage an die Gemini-API (Interactions-API, siehe spikes/api/spike.mjs).
-//! Der Key bleibt auf der Rust-Seite und erscheint nie im Frontend oder in Logs.
+//! Requests to the Gemini API (Interactions API, see spikes/api/spike.mjs).
+//! The key stays on the Rust side and never shows up in the frontend or in logs.
 
 use std::time::Duration;
 
@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 
 const ENDPOINT: &str = "https://generativelanguage.googleapis.com/v1beta/interactions";
 
-/// Reihenfolge der Versuche bei Überlastung (503). Kommt später in die Einstellungen.
+/// Order of attempts when a model is overloaded (503). Will move to the settings.
 const MODELS: [&str; 3] = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.6-flash"];
 const TTS_MODELS: [&str; 3] = ["gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts", "gemini-3.8-flash-tts"];
 const TTS_VOICE: &str = "Kore";
@@ -45,7 +45,7 @@ pub struct Plot {
     pub label: String,
 }
 
-/// Fehlerarten, die das Frontend jeweils mit eigener Meldung anzeigt.
+/// Error kinds, each shown with its own message in the frontend.
 #[derive(Debug, Serialize)]
 #[serde(tag = "kind", content = "message", rename_all = "camelCase")]
 pub enum AskError {
@@ -81,10 +81,10 @@ fn schema() -> Value {
     })
 }
 
-/// Ohne getippte Frage steht sie in der Sprachaufnahme.
+/// Without a typed question, the question is in the voice recording.
 const AUDIO_QUESTION: &str = "The question is in the attached voice recording. Answer in the language that is spoken. If the recording is unintelligible or empty, set needsClarification.";
 
-/// Eine Nutzer-Nachricht: getippte Frage oder Sprachaufnahme, beim ersten Mal mit Screenshot.
+/// A user message: typed question or voice recording, with the screenshot the first time.
 pub fn user_step(question: Option<&str>, audio: Option<(&[u8], &str)>, screenshot: Option<&[u8]>) -> Value {
     let b64 = |bytes: &[u8]| base64::engine::general_purpose::STANDARD.encode(bytes);
     let mut content = vec![json!({ "type": "text", "text": question.unwrap_or(AUDIO_QUESTION) })];
@@ -97,13 +97,13 @@ pub fn user_step(question: Option<&str>, audio: Option<(&[u8], &str)>, screensho
     json!({ "type": "user_input", "content": content })
 }
 
-/// Die Antwort des Modells als Schritt für den Verlauf.
+/// The model's answer as a step for the history.
 pub fn model_step(text: &str) -> Value {
     json!({ "type": "model_output", "content": [{ "type": "text", "text": text }] })
 }
 
-/// Frage stellen. Der Verlauf wird jedes Mal komplett mitgeschickt, Google speichert
-/// nichts (`store: false`). Liefert die Antwort und ihren Rohtext für den Verlauf.
+/// Ask a question. The full history is sent every time, Google stores nothing
+/// (`store: false`). Returns the answer and its raw text for the history.
 pub async fn ask(key: &str, history: &[Value], step: &Value) -> Result<(Answer, String), AskError> {
     let input: Vec<&Value> = history.iter().chain([step]).collect();
     let body = post(key, &MODELS, |model| {
@@ -123,7 +123,7 @@ pub async fn ask(key: &str, history: &[Value], step: &Value) -> Result<(Answer, 
     parse_answer(&body)
 }
 
-/// Text vorlesen lassen. Liefert eine WAV-Datei (24 kHz, mono) als Bytes.
+/// Turn text into speech. Returns a WAV file (24 kHz, mono) as bytes.
 pub async fn speak(key: &str, text: &str) -> Result<Vec<u8>, AskError> {
     let body = post(key, &TTS_MODELS, |model| {
         json!({
@@ -145,7 +145,7 @@ pub async fn speak(key: &str, text: &str) -> Result<Vec<u8>, AskError> {
         .map_err(|e| AskError::Failed(format!("Unreadable audio: {e}")))
 }
 
-/// Anfrage senden, bei Überlastung (503) mit dem nächsten Modell der Liste.
+/// Send a request; on overload (503) retry with the next model in the list.
 async fn post(key: &str, models: &[&str], body: impl Fn(&str) -> Value) -> Result<String, AskError> {
     let client = reqwest::Client::builder()
         .timeout(TIMEOUT)
@@ -154,7 +154,7 @@ async fn post(key: &str, models: &[&str], body: impl Fn(&str) -> Value) -> Resul
 
     for (attempt, model) in models.iter().enumerate() {
         if attempt > 0 {
-            // Kurze Pause, ohne den Async-Thread zu blockieren.
+            // Short pause without blocking the async thread.
             let _ = tauri::async_runtime::spawn_blocking(|| std::thread::sleep(RETRY_PAUSE)).await;
         }
         let res = client
@@ -190,7 +190,7 @@ async fn post(key: &str, models: &[&str], body: impl Fn(&str) -> Value) -> Resul
     Err(AskError::Overloaded)
 }
 
-/// Inhaltsblöcke eines Typs ("text", "audio") aus den Ausgabeschritten.
+/// Content blocks of one type ("text", "audio") from the output steps.
 fn output_blocks(body: &str, kind: &str) -> Result<Vec<Value>, AskError> {
     let interaction: Value =
         serde_json::from_str(body).map_err(|e| AskError::Failed(format!("Unreadable response: {e}")))?;
@@ -217,9 +217,9 @@ fn parse_answer(body: &str) -> Result<(Answer, String), AskError> {
     Ok((answer, text))
 }
 
-/// Das Modell schreibt LaTeX manchmal mit einfachem Backslash ins JSON. Dann wird
-/// z. B. `\frac` als Seitenvorschub plus "rac" gelesen und `\text` als Tab plus "ext".
-/// Diese Steuerzeichen kommen in Formeln nie gewollt vor, also zurückverwandeln.
+/// The model sometimes writes LaTeX into the JSON with single backslashes. Then
+/// `\frac` is read as a form feed plus "rac", and `\text` as a tab plus "ext".
+/// These control characters never belong in a formula, so turn them back.
 fn repair_latex(tex: &str) -> String {
     let mut out = String::with_capacity(tex.len());
     for c in tex.chars() {
@@ -235,7 +235,7 @@ fn repair_latex(tex: &str) -> String {
     out
 }
 
-/// Wie `repair_latex`, aber nur innerhalb von `$...$`, der Text drumherum bleibt.
+/// Like `repair_latex`, but only inside `$...$`; the surrounding text is kept.
 fn repair_inline_latex(text: &str) -> String {
     text.split('$')
         .enumerate()
@@ -250,12 +250,12 @@ mod tests {
 
     #[test]
     fn repairs_json_escaped_latex() {
-        // So kommt "\forall \varepsilon > 0: \frac{1}{n} \text{ für } n" an, wenn das
-        // Modell die Backslashes im JSON nicht verdoppelt.
-        let broken = "\u{c}orall \\varepsilon > 0: \u{c}rac{1}{n} \text{ für } \nabla";
+        // This is how "\forall \varepsilon > 0: \frac{1}{n} \text{ for } \nabla" arrives
+        // when the model doesn't double the backslashes in the JSON.
+        let broken = "\u{c}orall \\varepsilon > 0: \u{c}rac{1}{n} \text{ for } \nabla";
         assert_eq!(
             repair_latex(broken),
-            "\\forall \\varepsilon > 0: \\frac{1}{n} \\text{ für } \\nabla"
+            "\\forall \\varepsilon > 0: \\frac{1}{n} \\text{ for } \\nabla"
         );
     }
 

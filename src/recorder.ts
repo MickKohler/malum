@@ -1,6 +1,6 @@
 /**
- * Mikrofonaufnahme für Push-to-talk. Das Mikrofon ist nur offen, solange
- * aufgenommen wird; danach wird es sofort freigegeben (Windows-Indikator geht aus).
+ * Microphone recording for push-to-talk. The microphone is only open while
+ * recording and is released right after (the Windows indicator turns off).
  */
 
 const MIME = "audio/webm;codecs=opus";
@@ -17,7 +17,7 @@ export class Recorder {
     return this.starting !== null;
   }
 
-  /** Aufnahme starten. Wirft `MicError` mit lesbarer Meldung. */
+  /** Start recording. Throws `MicError` with a readable message. */
   start(): Promise<void> {
     this.cancel();
     this.chunks = [];
@@ -46,7 +46,7 @@ export class Recorder {
       return recorder;
     })();
     this.starting = starting;
-    // Wurde während des Startens abgebrochen, Mikrofon gleich wieder schließen.
+    // Cancelled while starting: close the microphone right away.
     starting.then(
       (recorder) => {
         if (this.starting !== starting) recorder.stop();
@@ -58,7 +58,7 @@ export class Recorder {
     return starting.then(() => undefined);
   }
 
-  /** Aufnahme beenden und zurückgeben. `null`, wenn nichts aufgenommen wurde. */
+  /** Stop recording and return it. `null` if nothing was recorded. */
   async stop(): Promise<Recording | null> {
     const starting = this.starting;
     this.starting = null;
@@ -79,7 +79,7 @@ export class Recorder {
     return { bytes: new Uint8Array(await blob.arrayBuffer()), mime: "audio/webm" };
   }
 
-  /** Aufnahme verwerfen. */
+  /** Discard the recording. */
   cancel(): void {
     const starting = this.starting;
     this.starting = null;

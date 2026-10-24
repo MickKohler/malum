@@ -6,12 +6,12 @@ import { Plot } from "./Plot";
 import { MicError, Recorder, type Recording } from "./recorder";
 import "./App.css";
 
-/** Muss zur Dauer der Ausblend-Transition in App.css passen. */
+/** Must match the duration of the exit transition in App.css. */
 const EXIT_MS = 120;
 
 type Phase = "in" | "out";
 
-/** Muss zu `gemini::Answer` in Rust passen. */
+/** Must match `gemini::Answer` in Rust. */
 type Answer = {
   spoken: string;
   steps: string[];
@@ -20,24 +20,24 @@ type Answer = {
   needsClarification: string | null;
 };
 
-/** Muss zu `gemini::AskError` in Rust passen. */
+/** Must match `gemini::AskError` in Rust. */
 type AskError =
   | { kind: "keyMissing" | "keyInvalid" | "rateLimited" | "overloaded" | "offline" | "cancelled" }
   | { kind: "failed"; message: string };
 
 type Voice = "off" | "loading" | "playing";
 
-/** Getippte Frage oder Sprachaufnahme. */
+/** A typed question or a voice recording. */
 type Question = { text: string } | { audio: Recording };
 
-/** Zustand unter dem Verlauf. "input" = nichts los, bereit für die nächste Frage. */
+/** Status below the conversation. "input" = idle, ready for the next question. */
 type View =
   | { kind: "input" }
   | { kind: "key"; invalid: boolean }
   | { kind: "loading" }
   | { kind: "error"; message: string };
 
-/** Eine Frage mit Antwort. `question` ist `null` bei einer Sprachfrage. */
+/** A question and its answer. `question` is `null` for a voice question. */
 type Turn = { question: string | null; answer: Answer };
 
 function errorMessage(error: AskError): string {
@@ -62,28 +62,28 @@ function App() {
   const [keyText, setKeyText] = useState("");
   const [view, setView] = useState<View>({ kind: "input" });
   const [turns, setTurns] = useState<Turn[]>([]);
-  /** Vorschau des Fensters, das mit der ersten Frage gesendet wird. */
+  /** Preview of the window that is sent with the first question. */
   const [preview, setPreview] = useState<string | null>(null);
-  /** Zählt Einblendungen, damit eine späte Vorschau nicht in der nächsten landet. */
+  /** Counts how often the overlay was shown, so a late preview doesn't land in the next one. */
   const shown = useRef(0);
   const panelRef = useRef<HTMLElement>(null);
   const lastTurnRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const stageRef = useRef<HTMLElement>(null);
   const hideTimer = useRef<number | undefined>(undefined);
-  /** Frage, die nach dem Speichern des Keys gestellt wird. */
+  /** Question to ask once the key has been saved. */
   const pendingQuestion = useRef<Question | null>(null);
   const recorder = useRef(new Recorder());
   const [listening, setListening] = useState(false);
   const listeningRef = useRef(false);
   const [voice, setVoice] = useState<Voice>("off");
   const audio = useRef<HTMLAudioElement | null>(null);
-  /** Zählt Fragen hoch, damit eine verspätete Sprachausgabe nicht mehr abgespielt wird. */
+  /** Incremented per question, so late speech audio is not played anymore. */
   const session = useRef(0);
 
   useEffect(() => {
     const focusInput = () => {
-      // Ein Frame warten, bis das Fenster wirklich sichtbar ist.
+      // Wait one frame until the window is actually visible.
       requestAnimationFrame(() => {
         inputRef.current?.focus();
         inputRef.current?.select();
@@ -91,7 +91,7 @@ function App() {
     };
 
     const enter = () => {
-      // Eine laufende Ausblend-Animation abbrechen.
+      // Cancel a running exit animation.
       window.clearTimeout(hideTimer.current);
       stopVoice();
       setView({ kind: "input" });
@@ -141,7 +141,7 @@ function App() {
     };
   }, []);
 
-  // Fensterhöhe dem Inhalt anpassen (Rust begrenzt nach oben).
+  // Fit the window height to the content (Rust caps it).
   useLayoutEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;
@@ -151,13 +151,13 @@ function App() {
     return () => observer.disconnect();
   }, []);
 
-  // Solange eine Antwort oder Meldung sichtbar ist, schließt ein Klick daneben nicht.
+  // While an answer or message is visible, clicking elsewhere doesn't close the overlay.
   const sticky = turns.length > 0 || view.kind === "error";
   useEffect(() => {
     void invoke("set_sticky", { sticky });
   }, [sticky]);
 
-  // Neue Antwort von ihrem Anfang an zeigen, Statuszeilen unten im Blick halten.
+  // Show a new answer from its start, keep status lines at the bottom in view.
   useEffect(() => {
     if (view.kind === "input" && !listening) {
       lastTurnRef.current?.scrollIntoView({ block: "start" });
@@ -166,7 +166,7 @@ function App() {
     }
   }, [turns.length, view.kind, listening]);
 
-  // Nach jedem Wechsel zurück zur Eingabe den Fokus ins Feld setzen.
+  // Focus the field whenever we return to input.
   useEffect(() => {
     if (view.kind === "input" || view.kind === "key") inputRef.current?.focus();
   }, [view.kind]);
@@ -200,7 +200,7 @@ function App() {
     stopVoice();
     setListeningBoth(true);
     recorder.current.start().catch((e) => {
-      // Nur melden, wenn noch jemand zuhört (nicht nach kurzem Tippen).
+      // Only report it if we are still listening (not after a short tap).
       if (!listeningRef.current) return;
       setListeningBoth(false);
       setView({ kind: "error", message: e instanceof MicError ? e.message : String(e) });
@@ -212,7 +212,7 @@ function App() {
     setListeningBoth(false);
   }
 
-  /** `send`: lang gehalten, Aufnahme abschicken. Sonst nur verwerfen. */
+  /** `send`: the shortcut was held, so send the recording. Otherwise discard it. */
   async function endListening(send: boolean) {
     if (!listeningRef.current) return;
     if (!send) {
@@ -252,7 +252,7 @@ function App() {
       await player.play();
     } catch (e) {
       if (id !== session.current) return;
-      // Vorlesen ist Zusatz: Fehler leise anzeigen, die Antwort bleibt stehen.
+      // Reading aloud is optional: log quietly, the answer stays visible.
       console.error("Read-aloud failed", e);
       setVoice("off");
     }
@@ -368,7 +368,7 @@ function App() {
           aria-label={listening ? "Send recording" : "Start recording"}
           aria-pressed={listening}
           tabIndex={-1}
-          // Fokus im Eingabefeld lassen.
+          // Keep focus in the input field.
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => (listening ? void endListening(true) : startListening())}
         >
@@ -394,7 +394,7 @@ function App() {
           ref={panelRef}
           className="panel"
           data-phase={phase}
-          // Nur Zuhören, sonst nichts: erst nach der Tipp-Grenze zeigen.
+          // Only listening, nothing else: show after the tap threshold.
           data-listening-only={
             listening && !preview && turns.length === 0 && view.kind === "input" ? "" : undefined
           }

@@ -1,5 +1,5 @@
-//! Gemini-API-Key im Windows-Anmeldeinformationsspeicher (Systemsteuerung >
-//! Anmeldeinformationsverwaltung > Windows-Anmeldeinformationen).
+//! Gemini API key in the Windows Credential Manager (Control Panel >
+//! Credential Manager > Windows Credentials).
 
 use windows::Win32::Foundation::ERROR_NOT_FOUND;
 use windows::Win32::Security::Credentials::{

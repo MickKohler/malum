@@ -6,11 +6,12 @@ const HEIGHT = 200;
 const PAD = { left: 8, right: 8, top: 10, bottom: 18 };
 const SAMPLES = 480;
 
+/**if you are actually reading the code, kudos to you :) */
 type Props = { expr: string; xMin: number; xMax: number; label: string };
 
 type Curve = { paths: string[]; yMin: number; yMax: number; toX: (x: number) => number; toY: (y: number) => number };
 
-/** Funktion abtasten und als SVG-Pfade zurückgeben. `null`, wenn sich nichts zeichnen lässt. */
+/** Sample the function and return SVG paths. `null` if there is nothing to draw. */
 function sample({ expr, xMin, xMax }: Props): Curve | null {
   if (!(xMax > xMin)) return null;
   let fn: (x: number) => unknown;
@@ -29,12 +30,12 @@ function sample({ expr, xMin, xMax }: Props): Curve | null {
       const value = fn(x);
       if (typeof value === "number") y = value;
     } catch {
-      // Stelle nicht definiert, Lücke lassen.
+      // Undefined at this point, leave a gap.
     }
     points.push([x, y]);
   }
 
-  // y-Bereich ohne Ausreißer (z. B. Polstellen), sonst wird die Kurve flach.
+  // y range without outliers (e.g. poles), otherwise the curve gets flattened.
   const ys = points.map((p) => p[1]).filter(Number.isFinite).sort((a, b) => a - b);
   if (ys.length < 2) return null;
   let yMin = ys[Math.floor(ys.length * 0.02)];
@@ -50,7 +51,7 @@ function sample({ expr, xMin, xMax }: Props): Curve | null {
   const toX = (x: number) => PAD.left + ((x - xMin) / (xMax - xMin)) * (WIDTH - PAD.left - PAD.right);
   const toY = (y: number) => PAD.top + ((yMax - y) / (yMax - yMin)) * (HEIGHT - PAD.top - PAD.bottom);
 
-  // Pfad an Lücken und an Sprüngen aus dem sichtbaren Bereich heraus unterbrechen.
+  // Break the path at gaps and at jumps out of the visible range.
   const paths: string[] = [];
   let current = "";
   for (const [x, y] of points) {

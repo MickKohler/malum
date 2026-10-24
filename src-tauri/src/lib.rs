@@ -18,53 +18,53 @@ use tauri_plugin_global_shortcut::{
     Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState,
 };
 
-/// Logische Größe des Overlays (muss zu tauri.conf.json passen).
+/// Logical size of the overlay (must match tauri.conf.json).
 const OVERLAY_WIDTH: f64 = 440.0;
 const OVERLAY_MIN_HEIGHT: f64 = 72.0;
-/// Höher wird das Fenster nie, längere Antworten scrollen im Frontend.
+/// The window never gets taller; longer answers scroll in the frontend.
 const OVERLAY_MAX_HEIGHT: f64 = 640.0;
 
-/// Logischer Abstand des Fensters zum rechten und oberen Rand des Arbeitsbereichs.
-/// Sichtbar sind 16 bzw. 24 px, weil `.stage` in App.css noch 10 bzw. 8 px
-/// Innenabstand für den Schatten hat.
+/// Logical distance of the window from the right and top edge of the work area.
+/// Visually it is 16 and 24 px, because `.stage` in App.css adds 10 and 8 px
+/// of padding for the shadow.
 const MARGIN_RIGHT: f64 = 6.0;
 const MARGIN_TOP: f64 = 16.0;
 
-/// Fokusverlust direkt nach dem Einblenden ignorieren (Windows meldet beim
-/// Anzeigen manchmal kurz "unfokussiert", bevor der Fokus ankommt).
+/// Ignore focus loss right after showing (Windows sometimes briefly reports
+/// "unfocused" while showing, before focus arrives).
 const FOCUS_GRACE: Duration = Duration::from_millis(200);
 
-/// Kürzer gedrückt gilt als Tippen (Overlay zum Schreiben), länger als Sprechen.
+/// A shorter press counts as a tap (overlay for typing), a longer one as speaking.
 const HOLD_THRESHOLD: Duration = Duration::from_millis(300);
 
 #[derive(Default)]
 struct OverlayState {
-    /// Logisch geöffnet. Beim Ausblenden wird das sofort `false`, das Fenster
-    /// selbst bleibt sichtbar, bis das Frontend seine Ausblend-Animation fertig hat.
+    /// Logically open. Turns `false` as soon as hiding starts; the window itself
+    /// stays visible until the frontend has finished its exit animation.
     open: bool,
     shown_at: Option<Instant>,
     startup_error: Option<String>,
-    /// Eine Antwort ist sichtbar: Klick daneben schließt dann nicht mehr,
-    /// damit man ins Übungsblatt schauen kann.
+    /// An answer is visible: clicking elsewhere no longer closes the overlay,
+    /// so you can look at the exercise sheet.
     sticky: bool,
-    /// Shortcut wird gerade gehalten (seit wann).
+    /// The shortcut is being held (since when).
     pressed_at: Option<Instant>,
-    /// Das Overlay war beim Drücken schon offen und vorne: kurzes Tippen schließt es.
+    /// The overlay was already open and in front on press: a short tap closes it.
     tap_dismisses: bool,
-    /// Screenshot des Fensters, das vor dem Overlay vorne war, läuft gerade.
+    /// Capturing the window that was in front before the overlay.
     capturing: bool,
-    /// Fertiger Screenshot der Sitzung. Nur im Speicher.
+    /// Finished screenshot of the session. In memory only.
     screenshot: Option<Arc<Vec<u8>>>,
-    /// Bisherige Fragen und Antworten der Sitzung, für Rückfragen mit Kontext.
+    /// Questions and answers of the session so far, for follow-ups with context.
     history: Vec<serde_json::Value>,
-    /// Zählt Sitzungen, damit eine späte Antwort nicht in einer neuen Sitzung landet.
+    /// Counts sessions, so a late answer doesn't land in a new session.
     session: u64,
-    /// Brechen laufende Gemini-Anfragen (Antwort, Vorlesen) ab.
+    /// Cancel running Gemini requests (answer, speech).
     cancel: Vec<Box<dyn Fn() + Send>>,
 }
 
 impl OverlayState {
-    /// Sitzung beenden: Anfrage abbrechen, Screenshot verwerfen.
+    /// End the session: cancel requests, discard the screenshot.
     fn end_session(&mut self) {
         for cancel in self.cancel.drain(..) {
             cancel();
@@ -82,7 +82,7 @@ fn overlay(app: &AppHandle) -> Option<WebviewWindow> {
     app.get_webview_window("main")
 }
 
-/// Oben rechts an den Monitor andocken, auf dem gerade der Mauszeiger ist.
+/// Dock at the top right of the monitor the mouse cursor is on.
 fn dock_on_cursor_monitor(app: &AppHandle, window: &WebviewWindow) {
     let monitor = app
         .cursor_position()
@@ -95,8 +95,8 @@ fn dock_on_cursor_monitor(app: &AppHandle, window: &WebviewWindow) {
         return;
     };
 
-    // In physische Pixel dieses Monitors umrechnen, damit es auch bei
-    // unterschiedlicher Skalierung pro Monitor richtig sitzt.
+    // Convert to physical pixels of this monitor, so it also sits right
+    // with different scaling per monitor.
     let scale = monitor.scale_factor();
     let px = |logical: f64| (logical * scale).round() as i32;
 
@@ -106,8 +106,8 @@ fn dock_on_cursor_monitor(app: &AppHandle, window: &WebviewWindow) {
     let _ = window.set_position(PhysicalPosition::new(x, y));
 }
 
-/// `target` ist das Fenster, das aufgenommen werden soll (nur beim Shortcut,
-/// beim Tray-Klick ist das vordere Fenster die Taskleiste).
+/// `target` is the window to capture (only for the shortcut; on a tray click
+/// the window in front is the taskbar).
 fn show_overlay(app: &AppHandle, target: Option<isize>) {
     let Some(window) = overlay(app) else { return };
     {
@@ -127,7 +127,7 @@ fn show_overlay(app: &AppHandle, target: Option<isize>) {
                     .ok();
                 let state = app.state::<SharedState>();
                 let mut state = state.lock().unwrap();
-                // Inzwischen neue Sitzung: Bild verwerfen.
+                // A new session started meanwhile: drop the image.
                 if state.session == session {
                     state.screenshot = png.map(Arc::new);
                     state.capturing = false;
@@ -142,8 +142,8 @@ fn show_overlay(app: &AppHandle, target: Option<isize>) {
     let _ = app.emit("overlay-show", ());
 }
 
-/// Ausblenden anstoßen. Das Frontend spielt die Animation und ruft danach
-/// `hide_overlay` auf.
+/// Start hiding. The frontend plays the animation and then calls
+/// `hide_overlay`.
 fn dismiss_overlay(app: &AppHandle) {
     let state = app.state::<SharedState>();
     let mut state = state.lock().unwrap();
@@ -156,21 +156,21 @@ fn dismiss_overlay(app: &AppHandle) {
     let _ = app.emit("overlay-dismiss", ());
 }
 
-/// Shortcut gedrückt: Aufnahme starten. Ist das Overlay zu oder nicht vorne,
-/// beginnt eine neue Frage zum Fenster, das gerade vorne ist. Was mit der
-/// Aufnahme passiert, entscheidet erst das Loslassen.
+/// Shortcut pressed: start recording. If the overlay is closed or not in front,
+/// a new question about the window in front begins. What happens to the
+/// recording is decided on release.
 fn shortcut_pressed(app: &AppHandle) {
     let open = {
         let state = app.state::<SharedState>();
         let state = state.lock().unwrap();
         if state.pressed_at.is_some() {
-            return; // schon gedrückt
+            return; // already pressed
         }
         state.open
     };
     let active = open && overlay(app).is_some_and(|w| w.is_focused().unwrap_or(false));
     if !active {
-        // Vor dem Einblenden merken, welches Fenster vorne ist.
+        // Remember which window is in front before showing.
         show_overlay(app, capture::foreground_window());
     }
     {
@@ -182,8 +182,8 @@ fn shortcut_pressed(app: &AppHandle) {
     let _ = app.emit("ptt-start", ());
 }
 
-/// Shortcut losgelassen: lang gehalten = Aufnahme senden, kurz = verwerfen
-/// (und schließen, wenn das Overlay schon vorher offen war).
+/// Shortcut released: held long = send the recording, short = discard it
+/// (and close if the overlay was already open before).
 fn shortcut_released(app: &AppHandle) {
     let (pressed_at, tap_dismisses) = {
         let state = app.state::<SharedState>();
@@ -198,7 +198,7 @@ fn shortcut_released(app: &AppHandle) {
     }
 }
 
-/// Tray-Icon mit Menü. Linksklick blendet das Overlay ein, Rechtsklick zeigt das Menü.
+/// Tray icon with menu. Left click shows the overlay, right click shows the menu.
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "Open\tCtrl+Shift+Space", true, None::<&str>)?;
     let autostart_on = app.autolaunch().is_enabled().unwrap_or(false);
@@ -227,8 +227,8 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
-            // Immer einblenden statt umschalten: Der Klick aufs Tray nimmt dem
-            // Overlay ohnehin den Fokus, das würde es sonst gleich wieder schließen.
+            // Always show instead of toggling: clicking the tray takes focus from
+            // the overlay anyway, which would close it again right away.
             if let TrayIconEvent::Click {
                 button: MouseButton::Left,
                 button_state: MouseButtonState::Up,
@@ -245,8 +245,8 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Windows schaltet den Haken beim Klick schon um. Den neuen Zustand übernehmen
-/// und bei einem Fehler den Haken auf den echten Zustand zurücksetzen.
+/// Windows already toggles the check mark on click. Apply the new state and,
+/// on failure, reset the check mark to the real state.
 fn set_autostart(app: &AppHandle, item: &CheckMenuItem<tauri::Wry>) {
     let want = item.is_checked().unwrap_or(false);
     let autolaunch = app.autolaunch();
@@ -262,8 +262,8 @@ fn request_dismiss(app: AppHandle) {
     dismiss_overlay(&app);
 }
 
-/// Wird nach der Ausblend-Animation aufgerufen. Wurde inzwischen wieder
-/// geöffnet, bleibt das Fenster sichtbar.
+/// Called after the exit animation. If the overlay was reopened meanwhile,
+/// the window stays visible.
 #[tauri::command]
 fn hide_overlay(app: AppHandle, state: State<'_, SharedState>) {
     if state.lock().unwrap().open {
@@ -279,7 +279,7 @@ fn startup_error(state: State<'_, SharedState>) -> Option<String> {
     state.lock().unwrap().startup_error.clone()
 }
 
-/// Das Frontend meldet seine Inhaltshöhe, das Fenster wächst nach unten mit.
+/// The frontend reports its content height; the window grows downward with it.
 #[tauri::command]
 fn set_overlay_height(app: AppHandle, height: f64) {
     if let Some(window) = overlay(&app) {
@@ -302,8 +302,8 @@ fn save_api_key(key: String) -> Result<(), String> {
     credentials::save_api_key(key)
 }
 
-/// Frage (getippt oder als Sprachaufnahme) plus Screenshot an Gemini. Esc oder
-/// Schließen bricht die Anfrage ab.
+/// Send a question (typed or as a voice recording) plus screenshot to Gemini.
+/// Esc or closing cancels the request.
 #[tauri::command]
 async fn ask(
     app: AppHandle,
@@ -322,7 +322,7 @@ async fn ask(
         (state.screenshot.clone(), state.history.clone(), state.session)
     };
 
-    // Der Screenshot geht nur mit der ersten Frage mit, danach steht er im Verlauf.
+    // The screenshot goes with the first question only; after that it is in the history.
     let screenshot = screenshot.filter(|_| history.is_empty());
     let audio = audio.as_deref().zip(audio_mime.as_deref());
     let step = gemini::user_step(question.as_deref(), audio, screenshot.as_deref().map(Vec::as_slice));
@@ -340,7 +340,7 @@ async fn ask(
     Ok(answer)
 }
 
-/// Warten, bis der Screenshot beim Einblenden fertig ist (meist unter 200 ms).
+/// Wait until the screenshot taken on show is done (usually under 200 ms).
 async fn wait_for_capture(app: &AppHandle) {
     for _ in 0..100 {
         if !app.state::<SharedState>().lock().unwrap().capturing {
@@ -350,7 +350,7 @@ async fn wait_for_capture(app: &AppHandle) {
     }
 }
 
-/// Vorschau des Screenshots, der mit der ersten Frage gesendet wird. Leer, wenn es keinen gibt.
+/// Preview of the screenshot sent with the first question. Empty if there is none.
 #[tauri::command]
 async fn screenshot_preview(app: AppHandle) -> tauri::ipc::Response {
     wait_for_capture(&app).await;
@@ -358,13 +358,13 @@ async fn screenshot_preview(app: AppHandle) -> tauri::ipc::Response {
     tauri::ipc::Response::new(png.map(|p| p.to_vec()).unwrap_or_default())
 }
 
-/// Screenshot nicht senden.
+/// Don't send the screenshot.
 #[tauri::command]
 fn discard_screenshot(state: State<'_, SharedState>) {
     state.lock().unwrap().screenshot = None;
 }
 
-/// Text vorlesen. Gibt die WAV-Datei als rohe Bytes ans Frontend.
+/// Read text aloud. Passes the WAV file to the frontend as raw bytes.
 #[tauri::command]
 async fn speak(app: AppHandle, text: String) -> Result<tauri::ipc::Response, AskError> {
     let key = credentials::load_api_key()
@@ -374,7 +374,7 @@ async fn speak(app: AppHandle, text: String) -> Result<tauri::ipc::Response, Ask
     Ok(tauri::ipc::Response::new(wav))
 }
 
-/// Anfrage als eigene Aufgabe starten, die beim Schließen des Overlays abbricht.
+/// Run a request as its own task, cancelled when the overlay closes.
 async fn cancellable<T: Send + 'static>(
     app: &AppHandle,
     future: impl Future<Output = Result<T, AskError>> + Send + 'static,
@@ -388,8 +388,8 @@ async fn cancellable<T: Send + 'static>(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default();
-    // Muss als erstes Plugin registriert werden. Ein zweiter Start (z. B. übers
-    // Startmenü) blendet nur das Overlay der laufenden App ein.
+    // Must be registered as the first plugin. A second launch (e.g. from the
+    // Start menu) only shows the overlay of the running app.
     #[cfg(desktop)]
     {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -398,8 +398,8 @@ pub fn run() {
     }
 
     builder
-        // Mikrofon für Push-to-talk ohne Nachfrage der WebView erlauben. Die
-        // Windows-Datenschutzeinstellung für Desktop-Apps gilt trotzdem.
+        // Allow the microphone for push-to-talk without a WebView prompt. The
+        // Windows privacy setting for desktop apps still applies.
         .on_permission_request(|_, kind| match kind {
             PermissionKind::Microphone => PermissionResponse::Allow,
             _ => PermissionResponse::Default,
@@ -431,7 +431,7 @@ pub fn run() {
                 )?;
 
                 if let Err(err) = app.global_shortcut().register(toggle) {
-                    // Sichtbar machen statt still zu scheitern (z. B. Shortcut schon belegt).
+                    // Make it visible instead of failing silently (e.g. shortcut already taken).
                     let message = format!(
                         "Could not register the shortcut Ctrl+Shift+Space: {err}"
                     );
