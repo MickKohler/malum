@@ -1,48 +1,79 @@
+<div align="center">
+
 # malum
 
-A Windows overlay that explains your exercise sheets. Hold a shortcut, ask "Explain exercise 1b"
-or "Plot the function in 1a", let go. malum looks at the window you have open (for example a
-PDF), explains it out loud, shows the key formulas, and plots functions. Ask in English or
-German, it answers in the language you use.
+**A Windows overlay that explains your exercise sheets.**
+
+Hold a shortcut, ask "Explain exercise 1b" or "Plot the function in 2a", let go.<br>
+malum looks at the window you have open, explains it out loud, shows the key formulas and plots functions.
+
+[![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D4?logo=windows&logoColor=white)](#development)
+[![Built with Tauri 2](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)](https://tauri.app)
+[![Rust](https://img.shields.io/badge/Rust-backend-DEA584?logo=rust&logoColor=white)](src-tauri/src)
+[![React + TypeScript](https://img.shields.io/badge/React-TypeScript-3178C6?logo=typescript&logoColor=white)](src)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
+<!-- DEMO -->
+
+</div>
 
 > Work in progress. The name is a placeholder.
 
-## Usage
+## Features
 
-- **Tap** <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Space</kbd> to open the bar and type a question.
-- **Hold** <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Space</kbd> to ask by voice, release to send.
-- Ask follow-up questions in the same conversation, typed or spoken.
-- <kbd>Esc</kbd> cancels everything: recording, request and playback.
+- **Push-to-talk or type.** Tap <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Space</kbd> to type, hold it to ask by voice.
+- **Sees what you see.** The window in front is captured on key press, with a preview you can remove before sending.
+- **Explains out loud.** A spoken explanation plus short steps, read aloud with natural text-to-speech.
+- **Real math.** Formulas are typeset with KaTeX, functions are plotted right in the answer.
+- **Follow-up questions.** Ask "why?" and malum keeps the context of the conversation.
+- **English or German.** It answers in the language you ask in.
+- **Private by design.** Nothing is written to disk, and the API key stays in the Windows Credential Manager.
 
-On first use malum asks for a [Gemini API key](https://aistudio.google.com) and stores it in the
-Windows Credential Manager.
+<!-- SCREENSHOTS -->
 
 ## How it works
 
-1. On key press, the window in front is captured with Win32 `PrintWindow`, scaled down and kept
-   in memory. A small preview shows what will be sent, and it can be removed.
-2. The question (typed, or recorded in the WebView as WebM/Opus) goes to Gemini together with the
-   screenshot and the conversation so far. The request runs on the Rust side, so the API key
-   never reaches the UI.
-3. Gemini answers in a fixed JSON schema: a spoken explanation, short steps, LaTeX formulas and
-   an optional function to plot.
-4. The UI renders formulas with KaTeX, samples the function with mathjs and draws it as SVG,
-   and reads the explanation aloud with Gemini TTS.
+```mermaid
+sequenceDiagram
+    actor You
+    participant UI as Overlay UI<br/>(React + TypeScript)
+    participant Rust as Tauri backend<br/>(Rust)
+    participant Win as Windows
+    participant Gemini as Gemini API
+
+    You->>Rust: hold Ctrl+Shift+Space
+    Rust->>Win: capture window in front (PrintWindow)
+    Rust->>UI: show overlay, start recording
+    UI->>UI: record voice (MediaRecorder, WebM/Opus)
+    You->>Rust: release shortcut
+    UI->>Rust: ask(question or audio)
+    Rust->>Win: read API key (Credential Manager)
+    Rust->>Gemini: question + screenshot + conversation so far
+    Gemini-->>Rust: JSON answer (spoken text, steps, LaTeX, plot)
+    Rust-->>UI: answer
+    UI->>UI: render KaTeX, sample with mathjs, draw SVG plot
+    UI->>Rust: speak(text)
+    Rust->>Gemini: text-to-speech
+    Gemini-->>UI: WAV audio, played back
+```
+
+A few details worth knowing:
+
+- **The API key never reaches the UI.** All requests run on the Rust side.
+- **Stateless conversations.** The full history is sent with each question and Google stores
+  nothing (`store: false`); the screenshot goes with the first question only.
+- **Robust against overload.** When a model is busy (HTTP 503), malum falls back to the next one.
+- **Every step can be interrupted.** <kbd>Esc</kbd> cancels recording, the request and playback.
 
 Design decisions and their reasons are logged in [docs/DESIGN.md](docs/DESIGN.md).
 
-**Privacy:** only the window in front is captured, never the whole screen. Screenshots and
-recordings are never written to disk, and no conversation is stored by Google
-(`store: false`). On Gemini's free tier, Google may use inputs to improve its products, so only
-use malum with exercise material.
+## Getting started
 
-## Tech stack
+On first use, malum asks for a free [Gemini API key](https://aistudio.google.com) and stores it in
+the Windows Credential Manager.
 
-- [Tauri 2](https://tauri.app) with a Rust backend: global shortcut, tray, window capture,
-  Credential Manager, HTTP requests
-- React + TypeScript (strict) for the overlay UI
-- [KaTeX](https://katex.org) for formulas, [mathjs](https://mathjs.org) for plotting
-- Gemini API (Interactions API) for answers and text-to-speech
+**Privacy note:** only the window in front is captured, never the whole screen. On Gemini's free
+tier, Google may use inputs to improve its products, so only use malum with exercise material.
 
 ## Development
 
@@ -52,6 +83,16 @@ Requires Node.js, Rust and the [Tauri prerequisites](https://tauri.app/start/pre
 npm install
 npm run tauri dev     # run
 npm run tauri build   # build the installer
+```
+
+To try it without your own material, open [`docs/demo/sheet.html`](docs/demo/sheet.html) in a
+browser and ask about it.
+
+```
+src/              overlay UI (React): answer view, KaTeX, plots, voice recording
+src-tauri/src/    backend (Rust): shortcut, tray, window capture, key storage, Gemini client
+spikes/api/       standalone script used to validate the Gemini API before building the app
+docs/             design notes and the demo exercise sheet
 ```
 
 Built with the help of [Claude Code](https://claude.com/claude-code).

@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Exercise Sheet 3 – Sequences and Functions</title>
+    <!-- Demo sheet for screenshots and the README recording. Open it in a browser. -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.19.0/dist/katex.min.css" />
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.19.0/dist/katex.min.js"></script>
+    <script
+      defer
+      src="https://cdn.jsdelivr.net/npm/katex@0.19.0/dist/contrib/auto-render.min.js"
+      onload="renderMathInElement(document.body, { delimiters: [{ left: '$$', right: '$$', display: true }, { left: '$', right: '$', display: false }] })"
+    ></script>
+    <style>
+      body {
+        margin: 0;
+        background: #e9e9ec;
+        font-family: "Latin Modern Roman", "CMU Serif", Georgia, serif;
+        color: #1b1b1f;
+      }
+      .page {
+        max-width: 760px;
+        margin: 40px auto;
+        padding: 56px 72px 72px;
+        background: #fff;
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        font-size: 14px;
+        color: #555;
+        border-bottom: 1px solid #ccc;
+        padding-bottom: 10px;
+      }
+      h1 {
+        font-size: 24px;
+        margin: 28px 0 4px;
+      }
+      .sub {
+        color: #555;
+        margin: 0 0 28px;
+      }
+      h2 {
+        font-size: 18px;
+        margin: 32px 0 8px;
+      }
+      h2 span {
+        float: right;
+        font-weight: normal;
+        font-size: 15px;
+      }
+      ol {
+        list-style: none;
+        padding-left: 0;
+      }
+      li {
+        margin: 14px 0;
+        line-height: 1.6;
+      }
+      li b {
+        display: inline-block;
+        width: 28px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header>
+        <span>Analysis I · Winter term</span>
+        <span>Due: next Monday, 10 am</span>
+      </header>
+      <h1>Exercise Sheet 3</h1>
+      <p class="sub">Sequences, limits and functions</p>
+
+      <h2>Exercise 1 (Limits) <span>2 + 2 + 2 points</span></h2>
+      <p>Determine the limits of the following sequences $(x_n)_{n \in \mathbb{N}}$ using suitable estimates.</p>
+      <ol>
+        <li><b>a)</b> $x_n = \dfrac{\sin(n) + \cos(n)}{n}$</li>
+        <li><b>b)</b> $x_n = \dfrac{n^n}{2^{(n^2)}}$</li>
+        <li><b>c)</b> $x_n = \sqrt{n^2 + n} - n$</li>
+      </ol>
+
+      <h2>Exercise 2 (Functions) <span>3 + 3 points</span></h2>
+      <p>Let $f \colon \mathbb{R} \to \mathbb{R}$ be given by $f(x) = x^2 \sin(x)$.</p>
+      <ol>
+        <li><b>a)</b> Sketch $f$ on the interval $[-2\pi, 2\pi]$ and describe its behaviour.</li>
+        <li><b>b)</b> Compute $f'(x)$ and determine all critical points in $[0, \pi]$.</li>
+      </ol>
+
+      <h2>Exercise 3 (Accumulation points) <span>4 points</span></h2>
+      <p>
+        Show that $c \in \mathbb{R}$ is an accumulation point of $(x_n)$ if and only if for every
+        $\varepsilon &gt; 0$ there are infinitely many $n \in \mathbb{N}$ with $|x_n - c| &lt; \varepsilon$.
+      </p>
+    </main>
+  </body>
+</html>
