@@ -156,3 +156,6 @@ preview on/off), faster answers, new installer build.
   still be asked in German.
 - 2026-10-24, Repository goes public as a portfolio project under the MIT license. Commit
   emails were rewritten to the GitHub noreply address beforehand.
+- 2026-10-24, While the overlay is open, Esc is registered as a global shortcut and
+  released on close. Reason: an answer or error keeps the overlay open after clicking
+  elsewhere, and Esc then went to the other window instead of closing malum.

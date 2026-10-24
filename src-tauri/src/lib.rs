@@ -82,6 +82,25 @@ fn overlay(app: &AppHandle) -> Option<WebviewWindow> {
     app.get_webview_window("main")
 }
 
+fn escape() -> Shortcut {
+    Shortcut::new(None, Code::Escape)
+}
+
+/// While the overlay is open, Esc is taken system-wide, so it also closes the
+/// overlay after you clicked into another window. Released again on close.
+fn grab_escape(app: &AppHandle, grab: bool) {
+    let shortcuts = app.global_shortcut();
+    let result = match (grab, shortcuts.is_registered(escape())) {
+        (true, false) => shortcuts.register(escape()),
+        (false, true) => shortcuts.unregister(escape()),
+        _ => Ok(()),
+    };
+    // If another app holds Esc, Esc still works while the overlay has focus.
+    if let Err(err) = result {
+        eprintln!("Could not change the Esc shortcut: {err}");
+    }
+}
+
 /// Dock at the top right of the monitor the mouse cursor is on.
 fn dock_on_cursor_monitor(app: &AppHandle, window: &WebviewWindow) {
     let monitor = app
@@ -139,6 +158,7 @@ fn show_overlay(app: &AppHandle, target: Option<isize>) {
     dock_on_cursor_monitor(app, &window);
     let _ = window.show();
     let _ = window.set_focus();
+    grab_escape(app, true);
     let _ = app.emit("overlay-show", ());
 }
 
@@ -153,6 +173,7 @@ fn dismiss_overlay(app: &AppHandle) {
     state.open = false;
     state.end_session();
     drop(state);
+    grab_escape(app, false);
     let _ = app.emit("overlay-dismiss", ());
 }
 
@@ -419,6 +440,12 @@ pub fn run() {
                 app.handle().plugin(
                     tauri_plugin_global_shortcut::Builder::new()
                         .with_handler(move |app, shortcut, event| {
+                            if shortcut == &escape() {
+                                if event.state() == ShortcutState::Pressed {
+                                    dismiss_overlay(app);
+                                }
+                                return;
+                            }
                             if shortcut != &toggle {
                                 return;
                             }
