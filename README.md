@@ -83,6 +83,17 @@ the Windows Credential Manager.
 **Privacy note:** only the window in front is captured, never the whole screen. On Gemini's free
 tier, Google may use inputs to improve its products, so only use malum with exercise material.
 
+### Why Gemini?
+
+malum currently works with Google's Gemini API only. It was chosen because its free tier
+covers everything malum needs in one place: a screenshot and a voice recording as input,
+structured JSON answers, and natural text-to-speech for reading the answer aloud.
+
+Each user brings their own key; none is included in this repository. Other providers
+(OpenAI, Anthropic, …) won't work by just pasting their key, but all API code lives in one
+module, [`src-tauri/src/gemini.rs`](src-tauri/src/gemini.rs), so swapping the provider
+means rewriting that file, not the app.
+
 ## Development
 
 Requires Node.js, Rust and the [Tauri prerequisites](https://tauri.app/start/prerequisites/).
