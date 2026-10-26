@@ -13,7 +13,9 @@ malum looks at the window you have open, explains it out loud, shows the key for
 [![React + TypeScript](https://img.shields.io/badge/React-TypeScript-3178C6?logo=typescript&logoColor=white)](src)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-<!-- DEMO -->
+<br>
+
+<img src="docs/media/plot.png" alt="malum next to an exercise sheet, showing the solution steps, key formulas and a plot of the function" width="820">
 
 </div>
 
@@ -29,7 +31,13 @@ malum looks at the window you have open, explains it out loud, shows the key for
 - **English or German.** It answers in the language you ask in.
 - **Private by design.** Nothing is written to disk, and the API key stays in the Windows Credential Manager.
 
-<!-- SCREENSHOTS -->
+| Before asking: the window that will be shared | The spoken explanation, with steps below |
+|:---:|:---:|
+| <img src="docs/media/preview.png" alt="The overlay with a preview of the captured window and a button to remove it" width="400"> | <img src="docs/media/explain.png" alt="The overlay explaining how to find the coefficients of the polynomial" width="400"> |
+
+<sub>Exercise in the screenshots: "Graph Features" from
+[MIT OpenCourseWare 18.01SC Single Variable Calculus](https://ocw.mit.edu/courses/18-01sc-single-variable-calculus-fall-2010/),
+Fall 2010, licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).</sub>
 
 ## How it works
 
@@ -92,7 +100,7 @@ browser and ask about it.
 src/              overlay UI (React): answer view, KaTeX, plots, voice recording
 src-tauri/src/    backend (Rust): shortcut, tray, window capture, key storage, Gemini client
 spikes/api/       standalone script used to validate the Gemini API before building the app
-docs/             design notes and the demo exercise sheet
+docs/             design notes, screenshots and the demo exercise sheet
 ```
 
 Built with the help of [Claude Code](https://claude.com/claude-code).
