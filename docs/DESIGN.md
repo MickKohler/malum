@@ -159,3 +159,6 @@ preview on/off), faster answers, new installer build.
 - 2026-10-24, While the overlay is open, Esc is registered as a global shortcut and
   released on close. Reason: an answer or error keeps the overlay open after clicking
   elsewhere, and Esc then went to the other window instead of closing malum.
+- 2026-10-27, First release v0.1.0 on GitHub: NSIS installer built locally, not code-signed
+  (a certificate costs about 100 to 400 euros a year), so the README explains the SmartScreen
+  warning. Own app icon (the orb from the overlay), its source is in docs/logo/.
