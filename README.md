@@ -12,6 +12,9 @@ malum looks at the window you have open, explains it out loud, shows the key for
 [![Rust](https://img.shields.io/badge/Rust-backend-DEA584?logo=rust&logoColor=white)](src-tauri/src)
 [![React + TypeScript](https://img.shields.io/badge/React-TypeScript-3178C6?logo=typescript&logoColor=white)](src)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Latest release](https://img.shields.io/github/v/release/MickKohler/malum?label=release)](https://github.com/MickKohler/malum/releases/latest)
+
+**[Download for Windows](https://github.com/MickKohler/malum/releases/latest)**
 
 <br>
 
@@ -76,6 +79,13 @@ A few details worth knowing:
 Design decisions and their reasons are logged in [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Getting started
+
+1. Download `malum_<version>_x64-setup.exe` from the
+   [latest release](https://github.com/MickKohler/malum/releases/latest) and run it.
+2. The installer is not code-signed, so Windows SmartScreen may warn you. Click
+   **More info**, then **Run anyway**.
+3. Start malum from the Start menu; it runs in the system tray. Open any window, press
+   <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Space</kbd> and ask.
 
 On first use, malum asks for a free [Gemini API key](https://aistudio.google.com) and stores it in
 the Windows Credential Manager.
