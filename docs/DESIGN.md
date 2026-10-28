@@ -174,3 +174,7 @@ Open: real-world test of voice input, faster answers.
   `KeyboardEvent.code`, which uses the same key names as the shortcut plugin. It needs Ctrl, Alt
   or Win (Shift alone would block typing) and must not be Esc. The current shortcut is paused
   while recording, and if Windows refuses the new one, the old one stays.
+- 2026-10-28, A rejected shortcut is never silent: the reason shows right below the field and
+  recording goes on. A combination another app has registered never sends a keydown, only the
+  keyup, so a keyup without its keydown is reported as "already used". Losing focus (Win+D,
+  Alt+Tab) stops recording with a message. Invalid keys no longer leave the old shortcut paused.

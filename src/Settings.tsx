@@ -47,6 +47,22 @@ function heldModifiers(e: KeyboardEvent): string[] {
 
 const MODIFIER_LABELS: Record<string, string> = { control: "Ctrl", alt: "Alt", shift: "Shift", super: "Win" };
 
+/** Like `settings::shortcut_label` in Rust: "KeyM" becomes "M". */
+function codeLabel(code: string): string {
+  return code.replace(/^(Key|Digit|Arrow)/, "");
+}
+
+/** "control+alt+KeyM" becomes "Ctrl+Alt+M". */
+function shortcutLabel(shortcut: string): string {
+  return shortcut
+    .split("+")
+    .map((part) => MODIFIER_LABELS[part] ?? codeLabel(part))
+    .join("+");
+}
+
+/** Feedback right below the shortcut, so a rejected combination is never silent. */
+type ShortcutMessage = { kind: "error" | "ok"; text: string };
+
 function Settings() {
   const [view, setView] = useState<SettingsView | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -63,6 +79,12 @@ function Settings() {
   const recordingRef = useRef(false);
   /** Modifiers held so far while recording, e.g. "Ctrl+Alt". */
   const [held, setHeld] = useState("");
+  const [shortcutMessage, setShortcutMessage] = useState<ShortcutMessage | null>(null);
+  /** Counts rejected attempts, restarts the shake animation. */
+  const [rejected, setRejected] = useState(0);
+  /** Keys whose keydown arrived while recording. A keyup without one means
+   * another app or Windows took the combination before it reached us. */
+  const pressed = useRef(new Set<string>());
 
   function reload() {
     invoke<SettingsView>("get_settings")
@@ -89,10 +111,26 @@ function Settings() {
     const onKeyUp = (e: KeyboardEvent) => {
       if (!recordingRef.current) return;
       e.preventDefault();
-      setHeld(heldModifiers(e).map((m) => MODIFIER_LABELS[m]).join("+"));
+      const modifiers = heldModifiers(e);
+      setHeld(modifiers.map((m) => MODIFIER_LABELS[m]).join("+"));
+      // Only with Ctrl, Alt or Win held: a plain keyup can also be left over
+      // from the click on "Change".
+      const swallowed = !MODIFIER_CODES.has(e.code) && !pressed.current.has(e.code);
+      if (swallowed && (e.ctrlKey || e.altKey || e.metaKey)) {
+        reject(
+          `${shortcutLabel([...modifiers, e.code].join("+"))} is already used by Windows or another app. Try a different one.`,
+        );
+      }
     };
     // Leaving the window while recording keeps the old shortcut.
-    const onBlur = () => cancelRecording();
+    const onBlur = () => {
+      if (!recordingRef.current) return;
+      cancelRecording();
+      setShortcutMessage({
+        kind: "error",
+        text: "Recording stopped because the window lost focus. Combinations Windows uses itself, like Win+D or Alt+Tab, can't be recorded.",
+      });
+    };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", onBlur);
@@ -164,15 +202,25 @@ function Settings() {
     recordingRef.current = value;
     setRecording(value);
     setHeld("");
+    pressed.current.clear();
   }
 
-  async function startRecording() {
+  /** `keepMessage`: after a rejection, recording goes on and the reason stays visible. */
+  async function startRecording(keepMessage = false) {
     stopSample();
     setError(null);
+    if (!keepMessage) setShortcutMessage(null);
     // Otherwise Space would also click the focused button.
     (document.activeElement as HTMLElement | null)?.blur();
     await invoke("pause_shortcut");
     setRecordingBoth(true);
+  }
+
+  /** Show why a combination doesn't work and keep listening for the next one. */
+  function reject(text: string) {
+    setShortcutMessage({ kind: "error", text });
+    setRejected((n) => n + 1);
+    setHeld("");
   }
 
   function cancelRecording() {
@@ -184,6 +232,7 @@ function Settings() {
   function recordKey(e: KeyboardEvent) {
     if (e.key === "Escape") {
       cancelRecording();
+      setShortcutMessage(null);
       return;
     }
     const modifiers = heldModifiers(e);
@@ -191,21 +240,30 @@ function Settings() {
       setHeld(modifiers.map((m) => MODIFIER_LABELS[m]).join("+"));
       return;
     }
+    pressed.current.add(e.code);
+    const shortcut = [...modifiers, e.code].join("+");
     if (!e.ctrlKey && !e.altKey && !e.metaKey) {
-      setError("Use Ctrl, Alt or Win together with another key.");
+      reject(`${shortcutLabel(shortcut)} doesn't work: hold Ctrl, Alt or Win too.`);
       return;
     }
     setRecordingBoth(false);
-    void applyShortcut([...modifiers, e.code].join("+"));
+    void applyShortcut(shortcut, true);
   }
 
-  /** On failure Rust keeps (and re-registers) the old shortcut. */
-  async function applyShortcut(shortcut: string) {
+  /** On failure Rust keeps (and re-registers) the old shortcut. `recorded`: try
+   * again right away instead of making the user click "Change" again. */
+  async function applyShortcut(shortcut: string, recorded = false) {
     setError(null);
     try {
       await invoke("set_shortcut", { shortcut });
+      setShortcutMessage({ kind: "ok", text: `Saved. ${shortcutLabel(shortcut)} now opens malum.` });
     } catch (e) {
-      setError(String(e));
+      if (!recorded) {
+        setShortcutMessage({ kind: "error", text: String(e) });
+        return;
+      }
+      reject(String(e));
+      void startRecording(true);
     }
   }
 
@@ -303,7 +361,12 @@ function Settings() {
       <section>
         <h2>Shortcut</h2>
         <div className="row">
-          <span className="keys" data-recording={recording ? "" : undefined}>
+          <span
+            key={rejected}
+            className="keys"
+            data-recording={recording ? "" : undefined}
+            data-rejected={recording && shortcutMessage?.kind === "error" ? "" : undefined}
+          >
             {recording ? (held ? `${held}+ …` : "Press your shortcut …") : view.shortcutLabel}
           </span>
           {recording ? (
@@ -324,8 +387,19 @@ function Settings() {
           </button>
         </div>
         <p className="hint">
-          Tap it to type a question, hold it to ask by voice. {recording && "Esc cancels."}
+          {recording
+            ? "Hold Ctrl, Alt or Win and press a letter, number or F-key. Esc cancels."
+            : "Tap it to type a question, hold it to ask by voice."}
         </p>
+        {shortcutMessage && (
+          <p
+            className="shortcut-message"
+            data-kind={shortcutMessage.kind}
+            role={shortcutMessage.kind === "error" ? "alert" : "status"}
+          >
+            {shortcutMessage.text}
+          </p>
+        )}
       </section>
 
       <section>

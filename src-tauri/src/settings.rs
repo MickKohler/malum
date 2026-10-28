@@ -91,9 +91,11 @@ impl Settings {
 /// enough (Shift+M would block typing a capital M), and Esc closes the overlay.
 pub fn parse_shortcut(text: &str) -> Result<Shortcut, String> {
     let shortcut: Shortcut =
-        text.parse().map_err(|_| format!("{} can't be used as a shortcut.", shortcut_label(text)))?;
+        text.parse().map_err(|_| {
+            format!("{} can't be used as a shortcut. Try a letter, number or F-key.", shortcut_label(text))
+        })?;
     if !shortcut.mods.intersects(Modifiers::CONTROL | Modifiers::ALT | Modifiers::SUPER) {
-        return Err("Use Ctrl, Alt or Win together with another key.".into());
+        return Err(format!("{} doesn't work: hold Ctrl, Alt or Win too.", shortcut_label(text)));
     }
     if shortcut.key == Code::Escape {
         return Err("Esc is reserved for closing the overlay.".into());

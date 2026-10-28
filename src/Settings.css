@@ -73,6 +73,44 @@ h2 {
   font-size: 14px;
 }
 
+.keys[data-rejected] {
+  border-color: var(--error);
+  animation: shake 240ms ease-out;
+}
+
+@keyframes shake {
+  25% {
+    transform: translateX(-4px);
+  }
+  75% {
+    transform: translateX(4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .keys[data-rejected] {
+    animation: none;
+  }
+}
+
+.shortcut-message {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.shortcut-message[data-kind="error"] {
+  background: rgba(255, 138, 138, 0.1);
+  color: var(--error);
+}
+
+.shortcut-message[data-kind="ok"] {
+  background: rgba(95, 211, 141, 0.1);
+  color: #5fd38d;
+}
+
 .key-state::before {
   content: "";
   display: inline-block;

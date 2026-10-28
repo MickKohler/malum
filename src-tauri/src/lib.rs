@@ -315,7 +315,7 @@ fn open_settings_window(app: &AppHandle) {
     std::thread::spawn(move || {
         let result = WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("index.html".into()))
             .title("malum settings")
-            .inner_size(440.0, 620.0)
+            .inner_size(440.0, 680.0)
             .resizable(false)
             .maximizable(false)
             .theme(Some(Theme::Dark))
@@ -455,11 +455,18 @@ fn resume_shortcut(app: AppHandle) -> Result<(), String> {
     register_shortcut(&app)
 }
 
-/// Switch to a new shortcut. If Windows refuses it (taken by another app), the
-/// old one stays.
+/// Switch to a new shortcut. If it is invalid or Windows refuses it (taken by
+/// another app), the old one stays and is active again.
 #[tauri::command]
 fn set_shortcut(app: AppHandle, shortcut: String) -> Result<(), String> {
-    let new = settings::parse_shortcut(&shortcut)?;
+    let new = match settings::parse_shortcut(&shortcut) {
+        Ok(new) => new,
+        Err(err) => {
+            // The old one may be paused for recording.
+            let _ = register_shortcut(&app);
+            return Err(err);
+        }
+    };
     let old_text = app.state::<SharedSettings>().lock().unwrap().shortcut.clone();
     let shortcuts = app.global_shortcut();
     if let Ok(old) = settings::parse_shortcut(&old_text) {
@@ -471,10 +478,12 @@ fn set_shortcut(app: AppHandle, shortcut: String) -> Result<(), String> {
         if let Err(err) = shortcuts.register(new) {
             eprintln!("Could not register {shortcut}: {err}");
             let _ = register_shortcut(&app);
-            return Err(format!(
-                "{} is already used by Windows or another app. Try a different one.",
-                settings::shortcut_label(&shortcut)
-            ));
+            let label = settings::shortcut_label(&shortcut);
+            return Err(if err.to_string().contains("Unknown VKCode") {
+                format!("{label} can't be used as a shortcut. Try a letter, number or F-key.")
+            } else {
+                format!("{label} is already used by Windows or another app. Try a different one.")
+            });
         }
     }
     let settings = {
