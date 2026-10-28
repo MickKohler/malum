@@ -43,6 +43,11 @@ malum looks at the window you have open, explains it out loud, shows the key for
 [MIT OpenCourseWare 18.01SC Single Variable Calculus](https://ocw.mit.edu/courses/18-01sc-single-variable-calculus-fall-2010/),
 Fall 2010, licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).</sub>
 
+<p align="center">
+  <img src="docs/media/settings.png" alt="The settings window: API key, voice, read-aloud, window sharing and start with Windows" width="380"><br>
+  <sub>Settings, opened from the tray icon. Changes apply right away.</sub>
+</p>
+
 ## How it works
 
 ```mermaid
