@@ -401,10 +401,13 @@ struct Voice {
 
 #[tauri::command]
 fn get_settings(app: AppHandle) -> SettingsView {
+    // Lock once: a guard taken inside the struct literal would live until its end,
+    // and a second lock there would wait forever.
+    let current = app.state::<SharedSettings>().lock().unwrap().clone();
     SettingsView {
-        shortcut_label: settings::shortcut_label(&app.state::<SharedSettings>().lock().unwrap().shortcut),
+        shortcut_label: settings::shortcut_label(&current.shortcut),
         default_shortcut: settings::DEFAULT_SHORTCUT,
-        settings: app.state::<SharedSettings>().lock().unwrap().clone(),
+        settings: current,
         voices: settings::VOICES.iter().map(|&(name, style)| Voice { name, style }).collect(),
         has_key: matches!(credentials::load_api_key(), Ok(Some(_))),
         start_with_windows: app.autolaunch().is_enabled().unwrap_or(false),
