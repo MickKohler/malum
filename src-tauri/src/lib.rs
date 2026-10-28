@@ -17,9 +17,7 @@ use tauri::{
 use gemini::{Answer, AskError};
 use settings::Settings;
 use tauri_plugin_autostart::ManagerExt;
-use tauri_plugin_global_shortcut::{
-    Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState,
-};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Shortcut, ShortcutState};
 
 /// Logical size of the overlay (must match tauri.conf.json).
 const OVERLAY_WIDTH: f64 = 440.0;
@@ -82,8 +80,17 @@ impl OverlayState {
 type SharedState = Mutex<OverlayState>;
 type SharedSettings = Mutex<Settings>;
 
-/// The "Start with Windows" item in the tray menu, kept in sync with the settings window.
-struct AutostartItem(CheckMenuItem<tauri::Wry>);
+/// Tray menu items that change with the settings.
+struct TrayItems {
+    /// Shows the shortcut.
+    open: MenuItem<tauri::Wry>,
+    /// "Start with Windows", kept in sync with the settings window.
+    autostart: CheckMenuItem<tauri::Wry>,
+}
+
+fn open_item_text(shortcut: &str) -> String {
+    format!("Open\t{}", settings::shortcut_label(shortcut))
+}
 
 fn overlay(app: &AppHandle) -> Option<WebviewWindow> {
     app.get_webview_window("main")
@@ -229,7 +236,8 @@ fn shortcut_released(app: &AppHandle) {
 
 /// Tray icon with menu. Left click shows the overlay, right click shows the menu.
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
-    let open = MenuItem::with_id(app, "open", "Open\tCtrl+Shift+Space", true, None::<&str>)?;
+    let shortcut = app.state::<SharedSettings>().lock().unwrap().shortcut.clone();
+    let open = MenuItem::with_id(app, "open", open_item_text(&shortcut), true, None::<&str>)?;
     let autostart_on = app.autolaunch().is_enabled().unwrap_or(false);
     let autostart = CheckMenuItem::with_id(
         app,
@@ -246,7 +254,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         app,
         &[&open, &separator, &settings, &autostart, &separator, &quit],
     )?;
-    app.manage(AutostartItem(autostart));
+    app.manage(TrayItems { open: open.clone(), autostart: autostart.clone() });
 
     let mut tray = TrayIconBuilder::with_id("main")
         .tooltip("malum")
@@ -257,7 +265,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             "settings" => open_settings_window(app),
             "autostart" => {
                 // Windows already toggled the check mark.
-                let want = app.state::<AutostartItem>().0.is_checked().unwrap_or(false);
+                let want = app.state::<TrayItems>().autostart.is_checked().unwrap_or(false);
                 if let Err(err) = apply_autostart(app, want) {
                     eprintln!("{err}");
                 }
@@ -289,7 +297,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 fn apply_autostart(app: &AppHandle, want: bool) -> Result<(), String> {
     let autolaunch = app.autolaunch();
     let result = if want { autolaunch.enable() } else { autolaunch.disable() };
-    let _ = app.state::<AutostartItem>().0.set_checked(autolaunch.is_enabled().unwrap_or(false));
+    let _ = app.state::<TrayItems>().autostart.set_checked(autolaunch.is_enabled().unwrap_or(false));
     let _ = app.emit("settings-changed", ());
     result.map_err(|err| format!("Could not change autostart: {err}"))
 }
@@ -381,6 +389,8 @@ struct SettingsView {
     voices: Vec<Voice>,
     has_key: bool,
     start_with_windows: bool,
+    shortcut_label: String,
+    default_shortcut: &'static str,
 }
 
 #[derive(serde::Serialize)]
@@ -392,6 +402,8 @@ struct Voice {
 #[tauri::command]
 fn get_settings(app: AppHandle) -> SettingsView {
     SettingsView {
+        shortcut_label: settings::shortcut_label(&app.state::<SharedSettings>().lock().unwrap().shortcut),
+        default_shortcut: settings::DEFAULT_SHORTCUT,
         settings: app.state::<SharedSettings>().lock().unwrap().clone(),
         voices: settings::VOICES.iter().map(|&(name, style)| Voice { name, style }).collect(),
         has_key: matches!(credentials::load_api_key(), Ok(Some(_))),
@@ -400,7 +412,9 @@ fn get_settings(app: AppHandle) -> SettingsView {
 }
 
 #[tauri::command]
-fn set_settings(app: AppHandle, settings: Settings) -> Result<(), String> {
+fn set_settings(app: AppHandle, mut settings: Settings) -> Result<(), String> {
+    // The shortcut only changes through `set_shortcut`, which also registers it.
+    settings.shortcut = app.state::<SharedSettings>().lock().unwrap().shortcut.clone();
     if !settings.is_valid() {
         return Err(format!("Unknown voice: {}", settings.voice));
     }
@@ -408,6 +422,67 @@ fn set_settings(app: AppHandle, settings: Settings) -> Result<(), String> {
     *app.state::<SharedSettings>().lock().unwrap() = settings;
     let _ = app.emit("settings-changed", ());
     Ok(())
+}
+
+/// Register the shortcut from the settings, unless it already is.
+fn register_shortcut(app: &AppHandle) -> Result<(), String> {
+    let text = app.state::<SharedSettings>().lock().unwrap().shortcut.clone();
+    let shortcut = settings::parse_shortcut(&text)?;
+    let shortcuts = app.global_shortcut();
+    if shortcuts.is_registered(shortcut) {
+        return Ok(());
+    }
+    shortcuts.register(shortcut).map_err(|err| {
+        format!("Could not register the shortcut {}: {err}", settings::shortcut_label(&text))
+    })
+}
+
+/// While the settings window records a new shortcut, the current one must not
+/// open the overlay.
+#[tauri::command]
+fn pause_shortcut(app: AppHandle) {
+    let text = app.state::<SharedSettings>().lock().unwrap().shortcut.clone();
+    if let Ok(shortcut) = settings::parse_shortcut(&text) {
+        let _ = app.global_shortcut().unregister(shortcut);
+    }
+}
+
+#[tauri::command]
+fn resume_shortcut(app: AppHandle) -> Result<(), String> {
+    register_shortcut(&app)
+}
+
+/// Switch to a new shortcut. If Windows refuses it (taken by another app), the
+/// old one stays.
+#[tauri::command]
+fn set_shortcut(app: AppHandle, shortcut: String) -> Result<(), String> {
+    let new = settings::parse_shortcut(&shortcut)?;
+    let old_text = app.state::<SharedSettings>().lock().unwrap().shortcut.clone();
+    let shortcuts = app.global_shortcut();
+    if let Ok(old) = settings::parse_shortcut(&old_text) {
+        if old != new && shortcuts.is_registered(old) {
+            let _ = shortcuts.unregister(old);
+        }
+    }
+    if !shortcuts.is_registered(new) {
+        if let Err(err) = shortcuts.register(new) {
+            eprintln!("Could not register {shortcut}: {err}");
+            let _ = register_shortcut(&app);
+            return Err(format!(
+                "{} is already used by Windows or another app. Try a different one.",
+                settings::shortcut_label(&shortcut)
+            ));
+        }
+    }
+    let settings = {
+        let state = app.state::<SharedSettings>();
+        let mut settings = state.lock().unwrap();
+        settings.shortcut = shortcut;
+        settings.clone()
+    };
+    let _ = app.state::<TrayItems>().open.set_text(open_item_text(&settings.shortcut));
+    let _ = app.emit("settings-changed", ());
+    settings::save(&app, &settings)
 }
 
 #[tauri::command]
@@ -547,7 +622,6 @@ pub fn run() {
                 ))?;
                 build_tray(app.handle())?;
 
-                let toggle = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::Space);
                 app.handle().plugin(
                     tauri_plugin_global_shortcut::Builder::new()
                         .with_handler(move |app, shortcut, event| {
@@ -557,9 +631,7 @@ pub fn run() {
                                 }
                                 return;
                             }
-                            if shortcut != &toggle {
-                                return;
-                            }
+                            // Only Esc and the shortcut from the settings are registered.
                             match event.state() {
                                 ShortcutState::Pressed => shortcut_pressed(app),
                                 ShortcutState::Released => shortcut_released(app),
@@ -568,11 +640,9 @@ pub fn run() {
                         .build(),
                 )?;
 
-                if let Err(err) = app.global_shortcut().register(toggle) {
+                if let Err(err) = register_shortcut(app.handle()) {
                     // Make it visible instead of failing silently (e.g. shortcut already taken).
-                    let message = format!(
-                        "Could not register the shortcut Ctrl+Shift+Space: {err}"
-                    );
+                    let message = format!("{err}. Choose another one in the settings (tray icon).");
                     eprintln!("{message}");
                     app.state::<SharedState>().lock().unwrap().startup_error = Some(message);
                     show_overlay(app.handle(), None);
@@ -581,6 +651,12 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            // Closed while recording a new shortcut: turn the current one back on.
+            if let WindowEvent::Destroyed = event {
+                if window.label() == "settings" {
+                    let _ = register_shortcut(window.app_handle());
+                }
+            }
             if let WindowEvent::Focused(false) = event {
                 if window.label() != "main" {
                     return;
@@ -609,6 +685,9 @@ pub fn run() {
             get_settings,
             set_settings,
             set_start_with_windows,
+            pause_shortcut,
+            resume_shortcut,
+            set_shortcut,
             open_settings,
             try_voice,
             ask,
