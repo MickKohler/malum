@@ -1,0 +1,171 @@
+/* Settings window. Same colors as the overlay (App.css), but an opaque window. */
+:root {
+  --bg: #16161c;
+  --surface: rgba(255, 255, 255, 0.05);
+  --border: rgba(255, 255, 255, 0.1);
+  --text: #f4f4f6;
+  --text-dim: rgba(244, 244, 246, 0.55);
+  --accent-a: #8b7bff;
+  --accent-b: #4fd1ff;
+  --error: #ff8a8a;
+
+  color-scheme: dark;
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.settings {
+  padding: 8px 24px 24px;
+  user-select: none;
+}
+
+section + section {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+h2 {
+  margin: 12px 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.key-state {
+  flex: 1;
+}
+
+.key-state::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--error);
+}
+
+.key-state[data-ok]::before {
+  background: #5fd38d;
+}
+
+.field {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+
+.field:focus {
+  border-color: var(--accent-a);
+}
+
+select.field option {
+  background: var(--bg);
+}
+
+button {
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+button.primary {
+  border-color: transparent;
+  background: var(--accent-a);
+  color: #fff;
+}
+
+button.primary:hover:not(:disabled) {
+  background: #9a8cff;
+}
+
+button.danger {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.link {
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-b);
+}
+
+.link:hover:not(:disabled) {
+  background: none;
+  text-decoration: underline;
+}
+
+.hint {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.toggle {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  cursor: pointer;
+}
+
+.toggle + .toggle {
+  margin-top: 12px;
+}
+
+.toggle input {
+  margin: 3px 0 0;
+  accent-color: var(--accent-a);
+}
+
+.toggle small {
+  display: block;
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.settings-error {
+  margin: 18px 0 0;
+  color: var(--error);
+}

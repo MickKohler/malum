@@ -538,3 +538,16 @@ body,
     animation: none;
   }
 }
+
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-b);
+  font: inherit;
+  cursor: pointer;
+}
+
+.link:hover {
+  text-decoration: underline;
+}

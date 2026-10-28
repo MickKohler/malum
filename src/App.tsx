@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { Formula, MathText } from "./Math";
 import { Plot } from "./Plot";
 import { MicError, Recorder, type Recording } from "./recorder";
+import { errorMessage, type AskError } from "./errors";
 import "./App.css";
 
 /** Must match the duration of the exit transition in App.css. */
@@ -20,11 +21,6 @@ type Answer = {
   needsClarification: string | null;
 };
 
-/** Must match `gemini::AskError` in Rust. */
-type AskError =
-  | { kind: "keyMissing" | "keyInvalid" | "rateLimited" | "overloaded" | "offline" | "cancelled" }
-  | { kind: "failed"; message: string };
-
 type Voice = "off" | "loading" | "playing";
 
 /** A typed question or a voice recording. */
@@ -39,21 +35,6 @@ type View =
 
 /** A question and its answer. `question` is `null` for a voice question. */
 type Turn = { question: string | null; answer: Answer };
-
-function errorMessage(error: AskError): string {
-  switch (error.kind) {
-    case "rateLimited":
-      return "Free quota reached. Wait a minute and try again.";
-    case "overloaded":
-      return "Gemini is overloaded right now. Try again in a moment.";
-    case "offline":
-      return "Can't reach Gemini. Are you online?";
-    case "failed":
-      return `Something went wrong: ${error.message}`;
-    default:
-      return "Something went wrong.";
-  }
-}
 
 function App() {
   const [phase, setPhase] = useState<Phase>("out");
@@ -80,6 +61,8 @@ function App() {
   const audio = useRef<HTMLAudioElement | null>(null);
   /** Incremented per question, so late speech audio is not played anymore. */
   const session = useRef(0);
+  /** Setting: read every answer aloud right away. */
+  const readAloud = useRef(true);
 
   useEffect(() => {
     const focusInput = () => {
@@ -96,6 +79,7 @@ function App() {
       stopVoice();
       setView({ kind: "input" });
       setTurns([]);
+      loadSettings();
       loadPreview();
       setPhase("in");
       focusInput();
@@ -170,6 +154,12 @@ function App() {
   useEffect(() => {
     if (view.kind === "input" || view.kind === "key") inputRef.current?.focus();
   }, [view.kind]);
+
+  function loadSettings() {
+    invoke<{ settings: { readAloud: boolean } }>("get_settings")
+      .then((view) => (readAloud.current = view.settings.readAloud))
+      .catch((e) => console.error("Could not load the settings", e));
+  }
 
   function loadPreview() {
     const id = ++shown.current;
@@ -273,7 +263,7 @@ function App() {
       setTurns((prev) => [...prev, { question: "text" in question ? question.text : null, answer }]);
       setView({ kind: "input" });
       if ("text" in question) setText("");
-      void speak(answer.needsClarification ?? answer.spoken);
+      if (readAloud.current) void speak(answer.needsClarification ?? answer.spoken);
     } catch (e) {
       if (id !== session.current) return;
       const err = e as AskError;
@@ -459,7 +449,15 @@ function StatusView({ view }: { view: View }) {
         <p className="status">
           {view.invalid
             ? "The saved key was rejected. Paste a valid key."
-            : "One-time setup: paste your Gemini API key. It is stored securely in Windows."}
+            : "One-time setup: paste your Gemini API key. It is stored securely in Windows."}{" "}
+          <button
+            type="button"
+            className="link"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => void invoke("open_settings")}
+          >
+            Open settings
+          </button>
         </p>
       );
     case "error":
