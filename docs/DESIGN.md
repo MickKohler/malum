@@ -98,8 +98,10 @@ Accounts, cloud sync, mobile, wake word (always listening), local model, plugins
 2026-10-24: core flow v1 works. Tap the shortcut to type, hold it to speak. On press, the
 window in front is captured (in memory only) and shown as a removable preview. Answers come
 with steps, formulas (KaTeX), plots and read-aloud; follow-ups keep the conversation context.
-Open: real-world test of voice input, settings (key, model, voice, shortcut, read-aloud and
-preview on/off), faster answers, new installer build.
+2026-10-27: release v0.1.0 on GitHub.
+2026-10-28: settings window (tray menu > Settings…): replace or remove the key, voice with a
+sample, read aloud automatically, share the window in front, start with Windows.
+Open: real-world test of voice input, faster answers, changing the shortcut.
 
 ## Decision log
 
@@ -162,3 +164,8 @@ preview on/off), faster answers, new installer build.
 - 2026-10-27, First release v0.1.0 on GitHub: NSIS installer built locally, not code-signed
   (a certificate costs about 100 to 400 euros a year), so the README explains the SmartScreen
   warning. Own app icon (the orb from the overlay), its source is in docs/logo/.
+- 2026-10-28, Settings as JSON in the app config folder, read and written by Rust, no store
+  plugin (no new dependency). The key stays in the Credential Manager. Settings is its own
+  window instead of part of the overlay, because the overlay closes when it loses focus.
+  Not yet: changing the shortcut (needs a key recorder and a conflict check) and choosing the
+  model (the fallback on overload already picks one).

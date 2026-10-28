@@ -33,6 +33,7 @@ malum looks at the window you have open, explains it out loud, shows the key for
 - **Follow-up questions.** Ask "why?" and malum keeps the context of the conversation.
 - **English or German.** It answers in the language you ask in.
 - **Private by design.** Nothing is written to disk, and the API key stays in the Windows Credential Manager.
+- **Settings.** Pick one of 30 voices, turn off read-aloud or window sharing, start with Windows.
 
 | Before asking: the window that will be shared | The spoken explanation, with steps below |
 |:---:|:---:|
