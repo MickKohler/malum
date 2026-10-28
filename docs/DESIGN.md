@@ -101,7 +101,8 @@ with steps, formulas (KaTeX), plots and read-aloud; follow-ups keep the conversa
 2026-10-27: release v0.1.0 on GitHub.
 2026-10-28: settings window (tray menu > Settings…): replace or remove the key, voice with a
 sample, read aloud automatically, share the window in front, start with Windows.
-Open: real-world test of voice input, faster answers, changing the shortcut.
+The shortcut can be changed there too.
+Open: real-world test of voice input, faster answers.
 
 ## Decision log
 
@@ -169,3 +170,7 @@ Open: real-world test of voice input, faster answers, changing the shortcut.
   window instead of part of the overlay, because the overlay closes when it loses focus.
   Not yet: changing the shortcut (needs a key recorder and a conflict check) and choosing the
   model (the fallback on overload already picks one).
+- 2026-10-28, Changeable shortcut after all: recorded in the settings window from
+  `KeyboardEvent.code`, which uses the same key names as the shortcut plugin. It needs Ctrl, Alt
+  or Win (Shift alone would block typing) and must not be Esc. The current shortcut is paused
+  while recording, and if Windows refuses the new one, the old one stays.

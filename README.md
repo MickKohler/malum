@@ -26,14 +26,14 @@ malum looks at the window you have open, explains it out loud, shows the key for
 
 ## Features
 
-- **Push-to-talk or type.** Tap <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Space</kbd> to type, hold it to ask by voice.
+- **Push-to-talk or type.** Tap <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Space</kbd> (by default) to type, hold it to ask by voice.
 - **Sees what you see.** The window in front is captured on key press, with a preview you can remove before sending.
 - **Explains out loud.** A spoken explanation plus short steps, read aloud with natural text-to-speech.
 - **Real math.** Formulas are typeset with KaTeX, functions are plotted right in the answer.
 - **Follow-up questions.** Ask "why?" and malum keeps the context of the conversation.
 - **English or German.** It answers in the language you ask in.
 - **Private by design.** Nothing is written to disk, and the API key stays in the Windows Credential Manager.
-- **Settings.** Pick one of 30 voices, turn off read-aloud or window sharing, start with Windows.
+- **Settings.** Change the shortcut, pick one of 30 voices, turn off read-aloud or window sharing.
 
 | Before asking: the window that will be shared | The spoken explanation, with steps below |
 |:---:|:---:|

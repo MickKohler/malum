@@ -315,7 +315,7 @@ fn open_settings_window(app: &AppHandle) {
     std::thread::spawn(move || {
         let result = WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("index.html".into()))
             .title("malum settings")
-            .inner_size(440.0, 520.0)
+            .inner_size(440.0, 620.0)
             .resizable(false)
             .maximizable(false)
             .theme(Some(Theme::Dark))

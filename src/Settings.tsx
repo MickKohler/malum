@@ -6,7 +6,7 @@ import { errorMessage, type AskError } from "./errors";
 import "./Settings.css";
 
 /** Must match `settings::Settings` in Rust. */
-type Settings = { voice: string; readAloud: boolean; shareWindow: boolean };
+type Settings = { voice: string; readAloud: boolean; shareWindow: boolean; shortcut: string };
 
 /** Must match `SettingsView` in lib.rs. */
 type SettingsView = {
@@ -14,12 +14,38 @@ type SettingsView = {
   voices: { name: string; style: string }[];
   hasKey: boolean;
   startWithWindows: boolean;
+  shortcutLabel: string;
+  defaultShortcut: string;
 };
 
 type Sample = "off" | "loading" | "playing";
 
 /** How long "Remove" waits for the confirming second click. */
 const CONFIRM_MS = 4000;
+
+/** Keys that only count together with another key. */
+const MODIFIER_CODES = new Set([
+  "ControlLeft",
+  "ControlRight",
+  "AltLeft",
+  "AltRight",
+  "ShiftLeft",
+  "ShiftRight",
+  "MetaLeft",
+  "MetaRight",
+]);
+
+/** Held modifiers in the format of the shortcut plugin, e.g. ["control", "shift"]. */
+function heldModifiers(e: KeyboardEvent): string[] {
+  return [
+    e.ctrlKey && "control",
+    e.altKey && "alt",
+    e.shiftKey && "shift",
+    e.metaKey && "super",
+  ].filter((m): m is string => !!m);
+}
+
+const MODIFIER_LABELS: Record<string, string> = { control: "Ctrl", alt: "Alt", shift: "Shift", super: "Win" };
 
 function Settings() {
   const [view, setView] = useState<SettingsView | null>(null);
@@ -32,6 +58,11 @@ function Settings() {
   const audio = useRef<HTMLAudioElement | null>(null);
   /** Incremented per sample, so a late one is not played anymore. */
   const sampleId = useRef(0);
+  /** Waiting for the new shortcut. The current one is paused meanwhile. */
+  const [recording, setRecording] = useState(false);
+  const recordingRef = useRef(false);
+  /** Modifiers held so far while recording, e.g. "Ctrl+Alt". */
+  const [held, setHeld] = useState("");
 
   function reload() {
     invoke<SettingsView>("get_settings")
@@ -43,17 +74,34 @@ function Settings() {
     reload();
     // Also changed from elsewhere: tray menu, key pasted in the overlay.
     const unlisten = listen("settings-changed", reload);
-    // Esc stops the sample and cancels editing the key.
     const onKeyDown = (e: KeyboardEvent) => {
+      if (recordingRef.current) {
+        e.preventDefault();
+        recordKey(e);
+        return;
+      }
+      // Esc stops the sample and cancels editing the key.
       if (e.key !== "Escape") return;
       stopSample();
       setEditingKey(false);
       setKeyText("");
     };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (!recordingRef.current) return;
+      e.preventDefault();
+      setHeld(heldModifiers(e).map((m) => MODIFIER_LABELS[m]).join("+"));
+    };
+    // Leaving the window while recording keeps the old shortcut.
+    const onBlur = () => cancelRecording();
     window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
     return () => {
       void unlisten.then((off) => off());
       window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+      cancelRecording();
       window.clearTimeout(confirmTimer.current);
       stopSample();
     };
@@ -107,6 +155,55 @@ function Settings() {
     setError(null);
     try {
       await invoke("delete_api_key");
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
+  function setRecordingBoth(value: boolean) {
+    recordingRef.current = value;
+    setRecording(value);
+    setHeld("");
+  }
+
+  async function startRecording() {
+    stopSample();
+    setError(null);
+    // Otherwise Space would also click the focused button.
+    (document.activeElement as HTMLElement | null)?.blur();
+    await invoke("pause_shortcut");
+    setRecordingBoth(true);
+  }
+
+  function cancelRecording() {
+    if (!recordingRef.current) return;
+    setRecordingBoth(false);
+    invoke("resume_shortcut").catch((e) => setError(String(e)));
+  }
+
+  function recordKey(e: KeyboardEvent) {
+    if (e.key === "Escape") {
+      cancelRecording();
+      return;
+    }
+    const modifiers = heldModifiers(e);
+    if (MODIFIER_CODES.has(e.code)) {
+      setHeld(modifiers.map((m) => MODIFIER_LABELS[m]).join("+"));
+      return;
+    }
+    if (!e.ctrlKey && !e.altKey && !e.metaKey) {
+      setError("Use Ctrl, Alt or Win together with another key.");
+      return;
+    }
+    setRecordingBoth(false);
+    void applyShortcut([...modifiers, e.code].join("+"));
+  }
+
+  /** On failure Rust keeps (and re-registers) the old shortcut. */
+  async function applyShortcut(shortcut: string) {
+    setError(null);
+    try {
+      await invoke("set_shortcut", { shortcut });
     } catch (e) {
       setError(String(e));
     }
@@ -200,6 +297,34 @@ function Settings() {
             aistudio.google.com
           </button>
           .
+        </p>
+      </section>
+
+      <section>
+        <h2>Shortcut</h2>
+        <div className="row">
+          <span className="keys" data-recording={recording ? "" : undefined}>
+            {recording ? (held ? `${held}+ …` : "Press your shortcut …") : view.shortcutLabel}
+          </span>
+          {recording ? (
+            <button type="button" onClick={cancelRecording}>
+              Cancel
+            </button>
+          ) : (
+            <button type="button" onClick={() => void startRecording()}>
+              Change
+            </button>
+          )}
+          <button
+            type="button"
+            disabled={recording || settings.shortcut === view.defaultShortcut}
+            onClick={() => void applyShortcut(view.defaultShortcut)}
+          >
+            Reset
+          </button>
+        </div>
+        <p className="hint">
+          Tap it to type a question, hold it to ask by voice. {recording && "Esc cancels."}
         </p>
       </section>
 

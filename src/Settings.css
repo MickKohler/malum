@@ -52,6 +52,27 @@ h2 {
   flex: 1;
 }
 
+.keys {
+  flex: 1;
+  height: 32px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 13px;
+}
+
+.keys[data-recording] {
+  border-color: var(--accent-a);
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 14px;
+}
+
 .key-state::before {
   content: "";
   display: inline-block;

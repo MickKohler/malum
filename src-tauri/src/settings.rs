@@ -90,7 +90,8 @@ impl Settings {
 /// A shortcut needs Ctrl, Alt or Win plus one other key. Shift alone is not
 /// enough (Shift+M would block typing a capital M), and Esc closes the overlay.
 pub fn parse_shortcut(text: &str) -> Result<Shortcut, String> {
-    let shortcut: Shortcut = text.parse().map_err(|_| format!("Unknown shortcut: {text}"))?;
+    let shortcut: Shortcut =
+        text.parse().map_err(|_| format!("{} can't be used as a shortcut.", shortcut_label(text)))?;
     if !shortcut.mods.intersects(Modifiers::CONTROL | Modifiers::ALT | Modifiers::SUPER) {
         return Err("Use Ctrl, Alt or Win together with another key.".into());
     }

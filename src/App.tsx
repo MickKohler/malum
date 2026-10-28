@@ -63,6 +63,7 @@ function App() {
   const session = useRef(0);
   /** Setting: read every answer aloud right away. */
   const readAloud = useRef(true);
+  const [shortcutLabel, setShortcutLabel] = useState("Ctrl+Shift+Space");
 
   useEffect(() => {
     const focusInput = () => {
@@ -156,8 +157,11 @@ function App() {
   }, [view.kind]);
 
   function loadSettings() {
-    invoke<{ settings: { readAloud: boolean } }>("get_settings")
-      .then((view) => (readAloud.current = view.settings.readAloud))
+    invoke<{ settings: { readAloud: boolean }; shortcutLabel: string }>("get_settings")
+      .then((view) => {
+        readAloud.current = view.settings.readAloud;
+        setShortcutLabel(view.shortcutLabel);
+      })
       .catch((e) => console.error("Could not load the settings", e));
   }
 
@@ -354,7 +358,7 @@ function App() {
         <button
           type="button"
           className="mic"
-          title="Speak: hold Ctrl+Shift+Space (or click here)"
+          title={`Speak: hold ${shortcutLabel} (or click here)`}
           aria-label={listening ? "Send recording" : "Start recording"}
           aria-pressed={listening}
           tabIndex={-1}
