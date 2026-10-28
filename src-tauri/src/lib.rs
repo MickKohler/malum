@@ -1,6 +1,7 @@
 mod capture;
 mod credentials;
 mod gemini;
+mod settings;
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -9,10 +10,12 @@ use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::webview::{PermissionKind, PermissionResponse};
 use tauri::{
-    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, State, WebviewWindow, WindowEvent,
+    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, State, Theme, WebviewUrl,
+    WebviewWindow, WebviewWindowBuilder, WindowEvent,
 };
 
 use gemini::{Answer, AskError};
+use settings::Settings;
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_global_shortcut::{
     Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState,
@@ -77,6 +80,10 @@ impl OverlayState {
 }
 
 type SharedState = Mutex<OverlayState>;
+type SharedSettings = Mutex<Settings>;
+
+/// The "Start with Windows" item in the tray menu, kept in sync with the settings window.
+struct AutostartItem(CheckMenuItem<tauri::Wry>);
 
 fn overlay(app: &AppHandle) -> Option<WebviewWindow> {
     app.get_webview_window("main")
@@ -136,7 +143,8 @@ fn show_overlay(app: &AppHandle, target: Option<isize>) {
         state.open = true;
         state.sticky = false;
         state.shown_at = Some(Instant::now());
-        if let Some(hwnd) = target {
+        let share = app.state::<SharedSettings>().lock().unwrap().share_window;
+        if let Some(hwnd) = target.filter(|_| share) {
             state.capturing = true;
             let session = state.session;
             let app = app.clone();
@@ -231,11 +239,14 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         autostart_on,
         None::<&str>,
     )?;
+    let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
-    let menu = Menu::with_items(app, &[&open, &separator, &autostart, &separator, &quit])?;
-
-    let autostart_item = autostart.clone();
+    let menu = Menu::with_items(
+        app,
+        &[&open, &separator, &settings, &autostart, &separator, &quit],
+    )?;
+    app.manage(AutostartItem(autostart));
 
     let mut tray = TrayIconBuilder::with_id("main")
         .tooltip("malum")
@@ -243,7 +254,14 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(move |app, event| match event.id.as_ref() {
             "open" => show_overlay(app, None),
-            "autostart" => set_autostart(app, &autostart_item),
+            "settings" => open_settings_window(app),
+            "autostart" => {
+                // Windows already toggled the check mark.
+                let want = app.state::<AutostartItem>().0.is_checked().unwrap_or(false);
+                if let Err(err) = apply_autostart(app, want) {
+                    eprintln!("{err}");
+                }
+            }
             "quit" => app.exit(0),
             _ => {}
         })
@@ -266,16 +284,39 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Windows already toggles the check mark on click. Apply the new state and,
-/// on failure, reset the check mark to the real state.
-fn set_autostart(app: &AppHandle, item: &CheckMenuItem<tauri::Wry>) {
-    let want = item.is_checked().unwrap_or(false);
+/// Turn "Start with Windows" on or off. The tray check mark and the settings
+/// window then show the real state, also on failure.
+fn apply_autostart(app: &AppHandle, want: bool) -> Result<(), String> {
     let autolaunch = app.autolaunch();
     let result = if want { autolaunch.enable() } else { autolaunch.disable() };
-    if let Err(err) = result {
-        eprintln!("Could not change autostart: {err}");
-        let _ = item.set_checked(autolaunch.is_enabled().unwrap_or(false));
+    let _ = app.state::<AutostartItem>().0.set_checked(autolaunch.is_enabled().unwrap_or(false));
+    let _ = app.emit("settings-changed", ());
+    result.map_err(|err| format!("Could not change autostart: {err}"))
+}
+
+/// Show the settings window, or bring it to the front if it is already open.
+fn open_settings_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("settings") {
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+        return;
     }
+    // Creating a window from an event handler or a sync command deadlocks on
+    // Windows (see WebviewWindowBuilder::new), so do it on its own thread.
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let result = WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("index.html".into()))
+            .title("malum settings")
+            .inner_size(440.0, 520.0)
+            .resizable(false)
+            .maximizable(false)
+            .theme(Some(Theme::Dark))
+            .center()
+            .build();
+        if let Err(err) = result {
+            eprintln!("Could not open the settings: {err}");
+        }
+    });
 }
 
 #[tauri::command]
@@ -315,12 +356,80 @@ fn set_sticky(state: State<'_, SharedState>, sticky: bool) {
 }
 
 #[tauri::command]
-fn save_api_key(key: String) -> Result<(), String> {
+fn save_api_key(app: AppHandle, key: String) -> Result<(), String> {
     let key = key.trim();
     if key.is_empty() {
         return Err("Please paste a key".into());
     }
-    credentials::save_api_key(key)
+    credentials::save_api_key(key)?;
+    let _ = app.emit("settings-changed", ());
+    Ok(())
+}
+
+#[tauri::command]
+fn delete_api_key(app: AppHandle) -> Result<(), String> {
+    credentials::delete_api_key()?;
+    let _ = app.emit("settings-changed", ());
+    Ok(())
+}
+
+/// Everything the settings window shows. The key itself never leaves Rust.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SettingsView {
+    settings: Settings,
+    voices: Vec<Voice>,
+    has_key: bool,
+    start_with_windows: bool,
+}
+
+#[derive(serde::Serialize)]
+struct Voice {
+    name: &'static str,
+    style: &'static str,
+}
+
+#[tauri::command]
+fn get_settings(app: AppHandle) -> SettingsView {
+    SettingsView {
+        settings: app.state::<SharedSettings>().lock().unwrap().clone(),
+        voices: settings::VOICES.iter().map(|&(name, style)| Voice { name, style }).collect(),
+        has_key: matches!(credentials::load_api_key(), Ok(Some(_))),
+        start_with_windows: app.autolaunch().is_enabled().unwrap_or(false),
+    }
+}
+
+#[tauri::command]
+fn set_settings(app: AppHandle, settings: Settings) -> Result<(), String> {
+    if !settings.is_valid() {
+        return Err(format!("Unknown voice: {}", settings.voice));
+    }
+    settings::save(&app, &settings)?;
+    *app.state::<SharedSettings>().lock().unwrap() = settings;
+    let _ = app.emit("settings-changed", ());
+    Ok(())
+}
+
+#[tauri::command]
+fn set_start_with_windows(app: AppHandle, enabled: bool) -> Result<(), String> {
+    apply_autostart(&app, enabled)
+}
+
+#[tauri::command]
+async fn open_settings(app: AppHandle) {
+    open_settings_window(&app);
+}
+
+/// Sample of a voice for the settings window. Not tied to the overlay, so
+/// closing the overlay doesn't cancel it.
+#[tauri::command]
+async fn try_voice(voice: String) -> Result<tauri::ipc::Response, AskError> {
+    let key = credentials::load_api_key()
+        .map_err(AskError::Failed)?
+        .ok_or(AskError::KeyMissing)?;
+    let text = format!("Hi, I'm {voice}. This is how I will read your answers.");
+    let wav = gemini::speak(&key, &text, &voice).await?;
+    Ok(tauri::ipc::Response::new(wav))
 }
 
 /// Send a question (typed or as a voice recording) plus screenshot to Gemini.
@@ -391,7 +500,8 @@ async fn speak(app: AppHandle, text: String) -> Result<tauri::ipc::Response, Ask
     let key = credentials::load_api_key()
         .map_err(AskError::Failed)?
         .ok_or(AskError::KeyMissing)?;
-    let wav = cancellable(&app, async move { gemini::speak(&key, &text).await }).await?;
+    let voice = app.state::<SharedSettings>().lock().unwrap().voice.clone();
+    let wav = cancellable(&app, async move { gemini::speak(&key, &text, &voice).await }).await?;
     Ok(tauri::ipc::Response::new(wav))
 }
 
@@ -428,6 +538,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(SharedState::default())
         .setup(|app| {
+            app.manage(SharedSettings::new(settings::load(app.handle())));
             #[cfg(desktop)]
             {
                 app.handle().plugin(tauri_plugin_autostart::init(
@@ -471,6 +582,9 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let WindowEvent::Focused(false) = event {
+                if window.label() != "main" {
+                    return;
+                }
                 let app = window.app_handle();
                 let keep_open = {
                     let state = app.state::<SharedState>();
@@ -491,6 +605,12 @@ pub fn run() {
             screenshot_preview,
             discard_screenshot,
             save_api_key,
+            delete_api_key,
+            get_settings,
+            set_settings,
+            set_start_with_windows,
+            open_settings,
+            try_voice,
             ask,
             speak
         ])

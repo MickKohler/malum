@@ -3,7 +3,8 @@
 
 use windows::Win32::Foundation::ERROR_NOT_FOUND;
 use windows::Win32::Security::Credentials::{
-    CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC, CREDENTIALW, CredFree, CredReadW, CredWriteW,
+    CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC, CREDENTIALW, CredDeleteW, CredFree, CredReadW,
+    CredWriteW,
 };
 use windows::core::{HSTRING, PWSTR};
 
@@ -44,4 +45,14 @@ pub fn save_api_key(key: &str) -> Result<(), String> {
     };
     unsafe { CredWriteW(&cred, 0) }
         .map_err(|e| format!("Could not save the key: {}", e.message()))
+}
+
+/// Removing a key that isn't there is fine.
+pub fn delete_api_key() -> Result<(), String> {
+    let target = HSTRING::from(TARGET);
+    match unsafe { CredDeleteW(&target, CRED_TYPE_GENERIC, None) } {
+        Ok(()) => Ok(()),
+        Err(e) if e.code() == ERROR_NOT_FOUND.to_hresult() => Ok(()),
+        Err(e) => Err(format!("Could not remove the key: {}", e.message())),
+    }
 }

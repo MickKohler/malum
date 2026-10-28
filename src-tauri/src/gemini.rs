@@ -12,7 +12,6 @@ const ENDPOINT: &str = "https://generativelanguage.googleapis.com/v1beta/interac
 /// Order of attempts when a model is overloaded (503). Will move to the settings.
 const MODELS: [&str; 3] = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.6-flash"];
 const TTS_MODELS: [&str; 3] = ["gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts", "gemini-3.8-flash-tts"];
-const TTS_VOICE: &str = "Kore";
 const RETRY_PAUSE: Duration = Duration::from_secs(2);
 const TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -123,14 +122,14 @@ pub async fn ask(key: &str, history: &[Value], step: &Value) -> Result<(Answer, 
     parse_answer(&body)
 }
 
-/// Turn text into speech. Returns a WAV file (24 kHz, mono) as bytes.
-pub async fn speak(key: &str, text: &str) -> Result<Vec<u8>, AskError> {
+/// Turn text into speech with one of `settings::VOICES`. Returns a WAV file (24 kHz, mono) as bytes.
+pub async fn speak(key: &str, text: &str, voice: &str) -> Result<Vec<u8>, AskError> {
     let body = post(key, &TTS_MODELS, |model| {
         json!({
             "model": model,
             "input": [{ "type": "user_input", "content": [{ "type": "text", "text": text }] }],
             "response_format": { "type": "audio" },
-            "generation_config": { "speech_config": [{ "voice": TTS_VOICE }] },
+            "generation_config": { "speech_config": [{ "voice": voice }] },
             "store": false
         })
     })
