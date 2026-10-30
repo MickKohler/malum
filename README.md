@@ -16,13 +16,19 @@ malum looks at the window you have open, explains it out loud, shows the key for
 
 **[Download for Windows](https://github.com/MickKohler/malum/releases/latest)**
 
-<br>
+</div>
+
+> [!NOTE]
+> malum is a personal portfolio project and still a work in progress, not a commercial product.
+> It runs on the **free tier** of Google's Gemini API, so an answer usually takes 10 to 20 seconds,
+> and requests sometimes fail when Google's servers are busy or the free quota is used up.
+> That is expected, not a bug: see [Troubleshooting](#troubleshooting).
+
+<div align="center">
 
 <img src="docs/media/plot.png" alt="malum next to an exercise sheet, showing the solution steps, key formulas and a plot of the function" width="820">
 
 </div>
-
-> Work in progress. The name is a placeholder.
 
 ## Features
 
@@ -109,6 +115,28 @@ Each user brings their own key; none is included in this repository. Other provi
 (OpenAI, Anthropic, …) won't work by just pasting their key, but all API code lives in one
 module, [`src-tauri/src/gemini.rs`](src-tauri/src/gemini.rs), so swapping the provider
 means rewriting that file, not the app.
+
+## Troubleshooting
+
+**Answers take 10 to 20 seconds.** Gemini works through the exercise step by step before it
+answers, and the spoken version is generated separately afterwards. On the free tier this
+takes a moment, especially for longer exercises.
+
+**"Gemini is overloaded right now."** Google's free models are sometimes busy. malum then
+tries a second model automatically; if that one is busy too, wait a moment and ask again.
+
+**"Free quota reached."** The free tier allows a limited number of requests per minute and
+per day ([rate limits](https://ai.google.dev/gemini-api/docs/rate-limits)). Wait a minute,
+or until the next day if you asked a lot.
+
+**"Can't reach Gemini."** malum couldn't connect within 60 seconds. Check your internet
+connection, VPN or firewall.
+
+**The answer isn't read aloud.** Read-aloud may be turned off in the settings, or the voice
+request failed. Click the speaker button next to the answer to try again.
+
+**The shortcut does nothing.** Another app may use the same combination. Choose a different
+one in the settings (right-click the tray icon, then **Settings…**).
 
 ## Development
 
