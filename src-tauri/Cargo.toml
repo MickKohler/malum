@@ -1,6 +1,6 @@
 [package]
 name = "malum"
-version = "0.1.0"
+version = "0.2.0"
 description = "Windows overlay that explains your exercise sheets"
 authors = ["Mick Kohler"]
 edition = "2024"

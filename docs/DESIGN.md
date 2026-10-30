@@ -102,6 +102,7 @@ with steps, formulas (KaTeX), plots and read-aloud; follow-ups keep the conversa
 2026-10-28: settings window (tray menu > Settings…): replace or remove the key, voice with a
 sample, read aloud automatically, share the window in front, start with Windows.
 The shortcut can be changed there too.
+2026-10-30: release v0.2.0 with the settings window and the changeable shortcut.
 Open: real-world test of voice input, faster answers.
 
 ## Decision log
